@@ -37,6 +37,10 @@ export function moveForward(from: Position, steps: number, useShortcut: boolean)
 }
 
 export function moveBackward(from: Position, previousPosition: Position): Position {
+  if (from.kind === "finished") {
+    throw new Error("이미 완주한 말은 이동할 수 없습니다");
+  }
+
   if (from.kind === "start") {
     return { kind: "start" };
   }

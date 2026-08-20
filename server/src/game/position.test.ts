@@ -63,4 +63,8 @@ describe("moveBackward", () => {
     const result = moveBackward({ kind: "start" }, { kind: "start" });
     expect(result).toEqual({ kind: "start" });
   });
+
+  it("완주한 말은 빽도로도 되살아나지 않고 에러를 던진다", () => {
+    expect(() => moveBackward({ kind: "finished" }, { kind: "outer", index: 19 })).toThrow();
+  });
 });
