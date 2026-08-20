@@ -5,6 +5,8 @@ export type PieceId = string;
 export interface Piece {
   id: PieceId;
   ownerId: string;
+  /** 소속 팀 ("A" | "B"). 잡기는 팀 기준, 업기는 주인 기준으로 판정한다 (REQUIREMENTS.md §6). */
+  teamId: string;
   position: Position;
   previousPosition: Position;
 }
@@ -44,9 +46,9 @@ export function applyMove(
       .map((p) => p.id),
   );
 
-  // 도착 칸에 있던 상대 말 (잡기 대상) — 새 위치가 outer일 때만 의미 있음
+  // 도착 칸에 있던 상대 "팀" 말 (잡기 대상) — 같은 팀 동료의 말은 잡지 않는다 (REQUIREMENTS.md §6)
   const capturedPieceIds: PieceId[] = pieces
-    .filter((p) => p.ownerId !== mover.ownerId && samePosition(p.position, newPosition) && newPosition.kind !== "start" && newPosition.kind !== "finished")
+    .filter((p) => p.teamId !== mover.teamId && samePosition(p.position, newPosition) && newPosition.kind !== "start" && newPosition.kind !== "finished")
     .map((p) => p.id);
   const capturedSet = new Set(capturedPieceIds);
 

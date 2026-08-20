@@ -30,11 +30,11 @@ describe("nextTurnIndex", () => {
 });
 
 describe("checkWinner", () => {
-  function finishedPiece(id: string, ownerId: string): Piece {
-    return { id, ownerId, position: { kind: "finished" }, previousPosition: { kind: "start" } };
+  function finishedPiece(id: string, ownerId: string, teamId = "A"): Piece {
+    return { id, ownerId, teamId, position: { kind: "finished" }, previousPosition: { kind: "start" } };
   }
-  function unfinishedPiece(id: string, ownerId: string): Piece {
-    return { id, ownerId, position: { kind: "outer", index: 3 }, previousPosition: { kind: "start" } };
+  function unfinishedPiece(id: string, ownerId: string, teamId = "A"): Piece {
+    return { id, ownerId, teamId, position: { kind: "outer", index: 3 }, previousPosition: { kind: "start" } };
   }
 
   it("자기 말 2개가 모두 완주하면 승리", () => {

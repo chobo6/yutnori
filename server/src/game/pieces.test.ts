@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { applyMove, type Piece } from "./pieces";
 
-function piece(id: string, ownerId: string, index: number): Piece {
+// alice/amy는 A팀, bob은 B팀. teamId를 명시하지 않으면 소유자 이름으로 팀을 추론한다.
+const TEAM_OF: Record<string, string> = { alice: "A", amy: "A", bob: "B", ben: "B" };
+
+function piece(id: string, ownerId: string, index: number, teamId = TEAM_OF[ownerId] ?? "A"): Piece {
   return {
     id,
     ownerId,
+    teamId,
     position: { kind: "outer", index },
     previousPosition: { kind: "start" },
   };
@@ -25,7 +29,7 @@ describe("applyMove", () => {
 
   it("steps가 -1(빽도)이면 직전 위치로 되돌린다", () => {
     const pieces: Piece[] = [
-      { id: "p1", ownerId: "alice", position: { kind: "outer", index: 7 }, previousPosition: { kind: "outer", index: 4 } },
+      { id: "p1", ownerId: "alice", teamId: "A", position: { kind: "outer", index: 7 }, previousPosition: { kind: "outer", index: 4 } },
     ];
     const { pieces: result } = applyMove(pieces, "p1", -1, false);
     expect(result[0].position).toEqual({ kind: "outer", index: 4 });
@@ -60,7 +64,7 @@ describe("applyMove", () => {
     expect(capturedPieceIds).toEqual([]); // 자기 말은 잡히지 않음
   });
 
-  it("도착 칸에 상대 말이 있으면 시작점으로 돌려보내고 capturedPieceIds에 담는다", () => {
+  it("도착 칸에 상대 팀 말이 있으면 시작점으로 돌려보내고 capturedPieceIds에 담는다", () => {
     const pieces = [piece("p1", "alice", 3), piece("enemy1", "bob", 5)];
     const { pieces: result, capturedPieceIds } = applyMove(pieces, "p1", 2, false);
     const enemy = result.find((p) => p.id === "enemy1")!;
@@ -68,12 +72,38 @@ describe("applyMove", () => {
     expect(capturedPieceIds).toEqual(["enemy1"]);
   });
 
-  it("도착 칸에 내 말과 상대 말이 섞여 있으면 내 말은 그대로, 상대 말만 잡힌다", () => {
-    const pieces = [piece("p1", "alice", 3), piece("p2", "alice", 5), piece("enemy1", "bob", 5)];
+  it("도착 칸에 같은 팀 동료(주인은 다름)의 말이 있어도 잡히지 않는다", () => {
+    // alice와 amy는 둘 다 A팀 — 아군 오사(friendly fire)가 발생하면 안 된다.
+    const pieces = [piece("p1", "alice", 3), piece("mate1", "amy", 5)];
+    const { pieces: result, capturedPieceIds } = applyMove(pieces, "p1", 2, false);
+    const mate = result.find((p) => p.id === "mate1")!;
+    expect(mate.position).toEqual({ kind: "outer", index: 5 }); // 제자리
+    expect(capturedPieceIds).toEqual([]);
+  });
+
+  it("같은 팀 동료의 말은 업기 대상이 아니라 함께 이동하지 않는다", () => {
+    // 업기는 "자신의 말 2개끼리"만 성립한다 (REQUIREMENTS.md §6).
+    const pieces = [piece("p1", "alice", 5), piece("mate1", "amy", 5)];
+    const { pieces: result } = applyMove(pieces, "p1", 2, false); // p1: 5->7
+    const p1 = result.find((p) => p.id === "p1")!;
+    const mate = result.find((p) => p.id === "mate1")!;
+    expect(p1.position).toEqual({ kind: "outer", index: 7 });
+    expect(mate.position).toEqual({ kind: "outer", index: 5 }); // 동료 말은 그대로
+  });
+
+  it("도착 칸에 아군(내 말·동료 말)과 상대 팀 말이 섞여 있으면 상대 팀 말만 잡힌다", () => {
+    const pieces = [
+      piece("p1", "alice", 3),
+      piece("p2", "alice", 5),
+      piece("mate1", "amy", 5),
+      piece("enemy1", "bob", 5),
+    ];
     const { pieces: result, capturedPieceIds } = applyMove(pieces, "p1", 2, false);
     const p2 = result.find((p) => p.id === "p2")!;
+    const mate = result.find((p) => p.id === "mate1")!;
     const enemy = result.find((p) => p.id === "enemy1")!;
     expect(p2.position).toEqual({ kind: "outer", index: 5 }); // 제자리(업힘)
+    expect(mate.position).toEqual({ kind: "outer", index: 5 }); // 제자리, 잡히지 않음
     expect(enemy.position).toEqual({ kind: "start" }); // 잡힘
     expect(capturedPieceIds).toEqual(["enemy1"]);
   });
@@ -81,8 +111,8 @@ describe("applyMove", () => {
   it("같은 주인의 두 말이 모두 start에 있을 때, 하나를 출발시키면 다른 하나는 start에 남아 있다", () => {
     // p1과 p2 모두 {kind:"start"}에서 시작
     const pieces: Piece[] = [
-      { id: "p1", ownerId: "alice", position: { kind: "start" }, previousPosition: { kind: "start" } },
-      { id: "p2", ownerId: "alice", position: { kind: "start" }, previousPosition: { kind: "start" } },
+      { id: "p1", ownerId: "alice", teamId: "A", position: { kind: "start" }, previousPosition: { kind: "start" } },
+      { id: "p2", ownerId: "alice", teamId: "A", position: { kind: "start" }, previousPosition: { kind: "start" } },
     ];
     const { pieces: result } = applyMove(pieces, "p1", 1, false); // p1을 start에서 출발시킴
     const p1 = result.find((p) => p.id === "p1")!;
