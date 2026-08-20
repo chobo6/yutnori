@@ -77,4 +77,17 @@ describe("applyMove", () => {
     expect(enemy.position).toEqual({ kind: "start" }); // 잡힘
     expect(capturedPieceIds).toEqual(["enemy1"]);
   });
+
+  it("같은 주인의 두 말이 모두 start에 있을 때, 하나를 출발시키면 다른 하나는 start에 남아 있다", () => {
+    // p1과 p2 모두 {kind:"start"}에서 시작
+    const pieces: Piece[] = [
+      { id: "p1", ownerId: "alice", position: { kind: "start" }, previousPosition: { kind: "start" } },
+      { id: "p2", ownerId: "alice", position: { kind: "start" }, previousPosition: { kind: "start" } },
+    ];
+    const { pieces: result } = applyMove(pieces, "p1", 1, false); // p1을 start에서 출발시킴
+    const p1 = result.find((p) => p.id === "p1")!;
+    const p2 = result.find((p) => p.id === "p2")!;
+    expect(p1.position).toEqual({ kind: "outer", index: 1 }); // p1이 이동
+    expect(p2.position).toEqual({ kind: "start" }); // p2는 start에 그대로
+  });
 });

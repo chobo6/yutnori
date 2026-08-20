@@ -15,9 +15,9 @@ export interface MoveResult {
 }
 
 function samePosition(a: Position, b: Position): boolean {
-  if (a.kind !== b.kind) return false;
   if (a.kind === "outer" && b.kind === "outer") return a.index === b.index;
-  return true;
+  if (a.kind === "center" && b.kind === "center") return true;
+  return false;
 }
 
 export function applyMove(
