@@ -2,6 +2,7 @@
 import { boot, ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createGameServer } from "../createServer";
+import type { MatchState } from "./MatchState";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
@@ -19,7 +20,7 @@ describe("MatchRoom 전체 매치 흐름", () => {
   afterEach(async () => await colyseus.cleanup());
 
   it("한 플레이어의 말 2개가 모두 완주할 때까지 반복해서 던지고 이동하면 그 팀이 승리한다", async () => {
-    const room = await colyseus.createRoom("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", {});
     const clients = await Promise.all([
       colyseus.connectTo(room),
       colyseus.connectTo(room),
