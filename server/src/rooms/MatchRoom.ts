@@ -13,15 +13,16 @@ export class MatchRoom extends Room<MatchState> {
   onCreate() {
     this.setState(new MatchState());
 
-    this.onMessage("pickTeam", (client, message: { team: "A" | "B" }) => {
+    this.onMessage("pickTeam", (client, message: { team: "A" | "B" } | undefined) => {
       if (this.state.phase !== "waiting") return;
-      if (message.team !== "A" && message.team !== "B") return;
+      if (message?.team !== "A" && message?.team !== "B") return;
       const player = this.state.players.get(client.sessionId);
       if (player) player.team = message.team;
     });
 
-    this.onMessage("pickCharacters", (client, message: { characters: string[] }) => {
+    this.onMessage("pickCharacters", (client, message: { characters: string[] } | undefined) => {
       if (this.state.phase !== "waiting") return;
+      if (!Array.isArray(message?.characters)) return;
       if (message.characters.length !== 2 || !message.characters.every((c) => VALID_CHARACTERS.has(c))) return;
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
@@ -47,10 +48,13 @@ export class MatchRoom extends Room<MatchState> {
       if (!this.isCurrentTurn(client.sessionId) || this.state.gaugePhase !== "charging") return;
       const result = resolveThrow(this.state.throwStartAt, Date.now());
       this.pendingThrows.set(client.sessionId, result);
-      this.state.gaugePhase = "idle";
+      this.state.lastThrowResult = result;
+      // "resolved" 상태에서는 throwStart 가드에 걸려 재던지기가 불가능하다 (이동해야 다시 idle).
+      this.state.gaugePhase = "resolved";
     });
 
-    this.onMessage("movePiece", (client, message: { pieceId: string; useShortcut?: boolean }) => {
+    this.onMessage("movePiece", (client, message: { pieceId: string; useShortcut?: boolean } | undefined) => {
+      if (!message || typeof message.pieceId !== "string") return;
       this.handleMovePiece(client, message);
     });
   }
@@ -63,6 +67,25 @@ export class MatchRoom extends Room<MatchState> {
 
   onLeave(client: Client) {
     this.state.players.delete(client.sessionId);
+  }
+
+  /**
+   * 핸들러 안에서 발생한 예외가 프로세스를 죽이지 않도록 하는 최후의 방어선.
+   * 이 메서드가 정의돼 있어야 Colyseus가 onMessage 핸들러를 try/catch로 감싼다.
+   */
+  onUncaughtException(err: unknown, methodName: string) {
+    console.error(`[MatchRoom:${this.roomId}] ${methodName} 처리 중 예외 발생:`, err);
+  }
+
+  /** PieceSchema[] -> 순수 Piece[] 변환 (teamId는 players에서 조회해 채운다). */
+  private toGamePieces(): Piece[] {
+    return this.state.pieces.map((p) => ({
+      id: p.id,
+      ownerId: p.ownerSessionId,
+      teamId: this.state.players.get(p.ownerSessionId)?.team ?? "",
+      position: fromSchemaPosition(p.positionKind, p.positionIndex),
+      previousPosition: fromSchemaPosition(p.previousPositionKind, p.previousPositionIndex),
+    }));
   }
 
   private isCurrentTurn(sessionId: string): boolean {
@@ -107,13 +130,10 @@ export class MatchRoom extends Room<MatchState> {
 
     const targetPiece = this.state.pieces.find((p) => p.id === message.pieceId);
     if (!targetPiece || targetPiece.ownerSessionId !== client.sessionId) return;
+    // 이미 완주한 말은 이동 대상이 될 수 없다 (applyMove가 예외를 던진다).
+    if (targetPiece.positionKind === "finished") return;
 
-    const pieces: Piece[] = this.state.pieces.map((p) => ({
-      id: p.id,
-      ownerId: p.ownerSessionId,
-      position: fromSchemaPosition(p.positionKind, p.positionIndex),
-      previousPosition: fromSchemaPosition(p.previousPositionKind, p.previousPositionIndex),
-    }));
+    const pieces: Piece[] = this.toGamePieces();
 
     const { pieces: updated } = applyMove(pieces, message.pieceId, YUT_STEPS[result], message.useShortcut ?? false);
 
@@ -127,14 +147,12 @@ export class MatchRoom extends Room<MatchState> {
       schemaPiece.previousPositionIndex = prevPos.index;
     }
 
+    // 던지기 결과 소진 — 서버 기록(pendingThrows)과 동기화 상태(lastThrowResult)를 항상 함께 비운다.
     this.pendingThrows.delete(client.sessionId);
+    this.state.lastThrowResult = "";
+    this.state.gaugePhase = "idle";
 
-    const finalPieces: Piece[] = this.state.pieces.map((p) => ({
-      id: p.id,
-      ownerId: p.ownerSessionId,
-      position: fromSchemaPosition(p.positionKind, p.positionIndex),
-      previousPosition: fromSchemaPosition(p.previousPositionKind, p.previousPositionIndex),
-    }));
+    const finalPieces: Piece[] = this.toGamePieces();
 
     if (checkWinner(finalPieces, client.sessionId)) {
       this.state.phase = "finished";

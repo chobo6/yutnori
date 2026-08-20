@@ -23,8 +23,10 @@ export class MatchState extends Schema {
   @type([PieceSchema]) pieces = new ArraySchema<PieceSchema>();
   @type(["string"]) turnOrder = new ArraySchema<string>();
   @type("number") currentTurnIndex: number = 0;
-  @type("string") gaugePhase: string = "idle"; // "idle" | "charging"
+  @type("string") gaugePhase: string = "idle"; // "idle" | "charging" | "resolved"
   @type("number") throwStartAt: number = 0;
+  /** 직전 던지기 결과(YutResult). 아직 던지지 않았거나 이동을 마쳐 소진되면 "". */
+  @type("string") lastThrowResult: string = "";
   @type("string") winnerSessionId: string = "";
 }
 
