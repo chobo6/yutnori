@@ -5,12 +5,26 @@ import styles from "./GameBoard.module.css";
 
 const OUTER_INDICES = Array.from({ length: 19 }, (_, i) => i + 1);
 
+/**
+ * 토큰에 보일 짧은 텍스트를 만든다.
+ * playerLabel은 "A팀 나" / "A팀 nCtT" 형태라 앞 2글자만 자르면 전부 "A팀"이 되어
+ * 같은 팀 말이 전부 똑같아 보인다. 팀 접두사를 떼어낸 소유자 표시 + 말 순번으로 말마다 구분되게 한다.
+ * 예: "나1", "나2", "nC1", "nC2"
+ */
+function tokenText(piece: PieceState, room: Room<MatchState>): string {
+  const label = playerLabel(piece.ownerSessionId, room);
+  const ownerPart = label.split(" ").pop() ?? label; // "A팀 nCtT" → "nCtT"
+  // sessionId 자체에 "-"가 들어갈 수 있으므로(예: "8KN-xxxx") 반드시 "마지막" 조각을 순번으로 쓴다.
+  const ordinal = Number(piece.id.split("-").pop() ?? 0) + 1;
+  return `${ownerPart.slice(0, 2)}${ordinal}`;
+}
+
 function PieceToken({ piece, room }: { piece: PieceState; room: Room<MatchState> }) {
   const owner = room.state.players.get(piece.ownerSessionId);
   const teamClass = owner?.team === "A" ? styles.teamA : owner?.team === "B" ? styles.teamB : undefined;
   return (
     <span className={`${styles.token} ${teamClass ?? ""}`} title={playerLabel(piece.ownerSessionId, room)}>
-      {playerLabel(piece.ownerSessionId, room).slice(0, 2)}
+      {tokenText(piece, room)}
     </span>
   );
 }
