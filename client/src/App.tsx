@@ -1,4 +1,4 @@
-import { useMatchRoom } from "./useMatchRoom";
+import { useMatchRoom } from "./game/useMatchRoom";
 import "./App.css";
 
 function App() {
