@@ -49,6 +49,51 @@ describe("MatchRoom", () => {
     expect(room.state.turnOrder.length).toBe(4);
   });
 
+  it("1v1 모드에서는 2명(팀당 1명)이 캐릭터 4종씩 고르고 준비하면 게임이 시작되고 말이 8개(4개씩) 생긴다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clientA = await colyseus.connectTo(room);
+    const clientB = await colyseus.connectTo(room);
+
+    clientA.send("pickMode", { mode: "1v1" });
+    await flush();
+
+    clientA.send("pickTeam", { team: "A" });
+    clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    clientB.send("pickTeam", { team: "B" });
+    clientB.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
+    await flush();
+
+    clientA.send("ready", {});
+    clientB.send("ready", {});
+    await flush();
+
+    expect(room.state.phase).toBe("playing");
+    expect(room.state.pieces.length).toBe(8);
+    expect(room.state.turnOrder.length).toBe(2);
+    expect(room.state.pieces.filter((p) => p.ownerSessionId === clientA.sessionId).length).toBe(4);
+    expect(room.state.pieces.filter((p) => p.ownerSessionId === clientB.sessionId).length).toBe(4);
+  });
+
+  it("1v1 모드에서 한 팀에 2명이 들어와 인원이 안 맞으면 게임이 시작되지 않는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clients = await Promise.all([colyseus.connectTo(room), colyseus.connectTo(room), colyseus.connectTo(room)]);
+
+    clients[0].send("pickMode", { mode: "1v1" });
+    await flush();
+
+    clients[0].send("pickTeam", { team: "A" });
+    clients[0].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    clients[1].send("pickTeam", { team: "A" });
+    clients[1].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    clients[2].send("pickTeam", { team: "B" });
+    clients[2].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    await flush();
+    for (const c of clients) c.send("ready", {});
+    await flush();
+
+    expect(room.state.phase).toBe("waiting");
+  });
+
   it("게임 시작 시 각 말에 플레이어가 고른 캐릭터가 순서대로 배정된다", async () => {
     const { room } = await setupFourPlayers(colyseus);
     const players = Array.from(room.state.players.values());

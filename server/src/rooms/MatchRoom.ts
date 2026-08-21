@@ -127,15 +127,19 @@ export class MatchRoom extends Room<MatchState> {
   }
 
   private maybeStartGame() {
-    if (this.state.players.size !== 4) return;
+    const requiredPerTeam = this.state.mode === "1v1" ? 1 : 2;
+    const requiredCharacters = this.state.mode === "1v1" ? 4 : 2;
+    const piecesPerPlayer = this.state.mode === "1v1" ? 4 : 2;
+
+    if (this.state.players.size !== requiredPerTeam * 2) return;
     const allPlayers = Array.from(this.state.players.values());
-    if (!allPlayers.every((p) => p.ready && p.characters.length === 2)) return;
+    if (!allPlayers.every((p) => p.ready && p.characters.length === requiredCharacters)) return;
 
     const teamA = allPlayers.filter((p) => p.team === "A").map((p) => p.sessionId);
     const teamB = allPlayers.filter((p) => p.team === "B").map((p) => p.sessionId);
-    if (teamA.length !== 2 || teamB.length !== 2) return;
+    if (teamA.length !== requiredPerTeam || teamB.length !== requiredPerTeam) return;
 
-    const order = buildTurnOrder([teamA[0], teamA[1]], [teamB[0], teamB[1]]);
+    const order = buildTurnOrder(teamA, teamB);
     this.state.turnOrder.clear();
     for (const id of order) this.state.turnOrder.push(id);
     this.state.currentTurnIndex = 0;
@@ -143,7 +147,7 @@ export class MatchRoom extends Room<MatchState> {
     this.state.pieces.clear();
     for (const sessionId of [...teamA, ...teamB]) {
       const owner = this.state.players.get(sessionId)!;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < piecesPerPlayer; i++) {
         const piece = new PieceSchema();
         piece.id = `${sessionId}-${i}`;
         piece.ownerSessionId = sessionId;
