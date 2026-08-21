@@ -10,6 +10,7 @@ export interface PlayerState {
 export interface PieceState {
   id: string;
   ownerSessionId: string;
+  character: string;
   positionKind: PositionKind;
   positionIndex: number;
   previousPositionKind: PositionKind;
