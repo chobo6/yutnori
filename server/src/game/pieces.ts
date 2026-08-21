@@ -7,6 +7,8 @@ export interface Piece {
   ownerId: string;
   /** 소속 팀 ("A" | "B"). 잡기는 팀 기준, 업기는 주인 기준으로 판정한다 (REQUIREMENTS.md §6). */
   teamId: string;
+  /** 이 말에 고정 배정된 캐릭터("교주"|"성직"|"마담"|"의사") — 능력 판정은 abilities.ts 참고. */
+  character: string;
   position: Position;
   previousPosition: Position;
 }
@@ -14,9 +16,11 @@ export interface Piece {
 export interface MoveResult {
   pieces: Piece[];
   capturedPieceIds: PieceId[];
+  /** 이번 이동으로 함께 움직인(업힌) 같은 주인의 다른 말 id들. 교주 능력 판정에 쓰인다(abilities.ts). */
+  piggybackedIds: PieceId[];
 }
 
-function samePosition(a: Position, b: Position): boolean {
+export function samePosition(a: Position, b: Position): boolean {
   if (a.kind === "outer" && b.kind === "outer") return a.index === b.index;
   if (a.kind === "center" && b.kind === "center") return true;
   return false;
@@ -62,5 +66,5 @@ export function applyMove(
     return p;
   });
 
-  return { pieces: result, capturedPieceIds };
+  return { pieces: result, capturedPieceIds, piggybackedIds: Array.from(piggybackIds) };
 }

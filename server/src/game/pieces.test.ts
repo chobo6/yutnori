@@ -4,11 +4,12 @@ import { applyMove, type Piece } from "./pieces";
 // alice/amy는 A팀, bob은 B팀. teamId를 명시하지 않으면 소유자 이름으로 팀을 추론한다.
 const TEAM_OF: Record<string, string> = { alice: "A", amy: "A", bob: "B", ben: "B" };
 
-function piece(id: string, ownerId: string, index: number, teamId = TEAM_OF[ownerId] ?? "A"): Piece {
+function piece(id: string, ownerId: string, index: number, teamId = TEAM_OF[ownerId] ?? "A", character = "교주"): Piece {
   return {
     id,
     ownerId,
     teamId,
+    character,
     position: { kind: "outer", index },
     previousPosition: { kind: "start" },
   };
@@ -29,7 +30,14 @@ describe("applyMove", () => {
 
   it("steps가 -1(빽도)이면 직전 위치로 되돌린다", () => {
     const pieces: Piece[] = [
-      { id: "p1", ownerId: "alice", teamId: "A", position: { kind: "outer", index: 7 }, previousPosition: { kind: "outer", index: 4 } },
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "outer", index: 7 },
+        previousPosition: { kind: "outer", index: 4 },
+      },
     ];
     const { pieces: result } = applyMove(pieces, "p1", -1, false);
     expect(result[0].position).toEqual({ kind: "outer", index: 4 });
@@ -111,13 +119,25 @@ describe("applyMove", () => {
   it("같은 주인의 두 말이 모두 start에 있을 때, 하나를 출발시키면 다른 하나는 start에 남아 있다", () => {
     // p1과 p2 모두 {kind:"start"}에서 시작
     const pieces: Piece[] = [
-      { id: "p1", ownerId: "alice", teamId: "A", position: { kind: "start" }, previousPosition: { kind: "start" } },
-      { id: "p2", ownerId: "alice", teamId: "A", position: { kind: "start" }, previousPosition: { kind: "start" } },
+      { id: "p1", ownerId: "alice", teamId: "A", character: "교주", position: { kind: "start" }, previousPosition: { kind: "start" } },
+      { id: "p2", ownerId: "alice", teamId: "A", character: "성직", position: { kind: "start" }, previousPosition: { kind: "start" } },
     ];
     const { pieces: result } = applyMove(pieces, "p1", 1, false); // p1을 start에서 출발시킴
     const p1 = result.find((p) => p.id === "p1")!;
     const p2 = result.find((p) => p.id === "p2")!;
     expect(p1.position).toEqual({ kind: "outer", index: 1 }); // p1이 이동
     expect(p2.position).toEqual({ kind: "start" }); // p2는 start에 그대로
+  });
+
+  it("업힌 말이 있으면 piggybackedIds에 그 말들의 id가 담긴다", () => {
+    const pieces = [piece("p1", "alice", 5), piece("p2", "alice", 5)];
+    const { piggybackedIds } = applyMove(pieces, "p1", 2, false);
+    expect(piggybackedIds).toEqual(["p2"]);
+  });
+
+  it("업힌 말이 없으면 piggybackedIds는 빈 배열이다", () => {
+    const pieces = [piece("p1", "alice", 3)];
+    const { piggybackedIds } = applyMove(pieces, "p1", 2, false);
+    expect(piggybackedIds).toEqual([]);
   });
 });
