@@ -1,0 +1,8 @@
+.wrap {
+  padding: 1rem;
+}
+
+.selected {
+  outline: 2px solid #2f6feb;
+  font-weight: bold;
+}
