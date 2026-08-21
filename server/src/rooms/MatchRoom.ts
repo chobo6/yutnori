@@ -7,6 +7,7 @@ import { MatchState, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosit
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
 const DEFAULT_THROW_TIMEOUT_MS = 5000;
 const DEFAULT_MOVE_TIMEOUT_MS = 5000;
+const MAX_CHAT_LENGTH = 200;
 
 export class MatchRoom extends Room<MatchState> {
   maxClients = 4;
@@ -66,6 +67,15 @@ export class MatchRoom extends Room<MatchState> {
     this.onMessage("movePiece", (client, message: { pieceId: string; useShortcut?: boolean } | undefined) => {
       if (!message || typeof message.pieceId !== "string") return;
       this.performMove(client.sessionId, message.pieceId, message.useShortcut ?? false);
+    });
+
+    // 채팅은 REQUIREMENTS.md §8: 말풍선으로 잠깐 표시했다가 사라지는 용도라 상태에 저장하지
+    // 않는다 — 방 단계(대기실/플레이/종료)와 무관하게 전원에게(보낸 사람 포함) 브로드캐스트만 한다.
+    this.onMessage("sendChat", (client, message: { text?: unknown } | undefined) => {
+      if (typeof message?.text !== "string") return;
+      const text = message.text.trim().slice(0, MAX_CHAT_LENGTH);
+      if (!text) return;
+      this.broadcast("chatMessage", { sessionId: client.sessionId, text });
     });
   }
 

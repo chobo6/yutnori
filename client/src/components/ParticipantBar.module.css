@@ -1,0 +1,42 @@
+.bar {
+  display: flex;
+  gap: 1rem;
+  /* 말풍선이 avatar 위쪽(bottom: 100%)으로 뜨는데, 이 바가 페이지 맨 위에 붙어있으면
+     뜰 공간이 없어 화면 밖으로 잘린다 — 위쪽에 항상 여유 공간을 확보해둔다. */
+  padding: 3.5rem 0.5rem 0.5rem;
+  border-bottom: 1px solid #ccc;
+}
+
+.slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatar {
+  border: 1px solid #999;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  background: #f3f3f3;
+}
+
+.bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.25rem;
+  min-width: 3rem;
+  max-width: 12rem;
+  width: max-content;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.75rem;
+  background: white;
+  border: 1px solid #333;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: center;
+}

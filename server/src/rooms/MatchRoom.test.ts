@@ -300,6 +300,78 @@ describe("MatchRoom", () => {
     expect(room.state.phase).toBe("playing"); // 방은 계속 진행 중
   });
 
+  it("sendChat을 보내면 모든 클라이언트가 chatMessage 브로드캐스트를 받는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clientA = await colyseus.connectTo(room);
+    const clientB = await colyseus.connectTo(room);
+
+    const receivedByB: Array<{ sessionId: string; text: string }> = [];
+    clientB.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => receivedByB.push(msg));
+
+    clientA.send("sendChat", { text: "안녕하세요" });
+    await flush();
+
+    expect(receivedByB).toEqual([{ sessionId: clientA.sessionId, text: "안녕하세요" }]);
+  });
+
+  it("보낸 사람 본인도 자기 chatMessage 브로드캐스트를 받는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    const received: Array<{ sessionId: string; text: string }> = [];
+    client.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => received.push(msg));
+
+    client.send("sendChat", { text: "테스트" });
+    await flush();
+
+    expect(received).toEqual([{ sessionId: client.sessionId, text: "테스트" }]);
+  });
+
+  it("앞뒤 공백은 제거되고, 너무 긴 채팅은 200자로 잘린다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clientA = await colyseus.connectTo(room);
+    const clientB = await colyseus.connectTo(room);
+
+    const received: Array<{ sessionId: string; text: string }> = [];
+    clientB.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => received.push(msg));
+
+    clientA.send("sendChat", { text: "  안녕  " });
+    clientA.send("sendChat", { text: "가".repeat(300) });
+    await flush();
+
+    expect(received[0].text).toBe("안녕");
+    expect(received[1].text).toBe("가".repeat(200));
+  });
+
+  it("빈 문자열이거나 잘못된 형식의 sendChat은 무시된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    const received: unknown[] = [];
+    client.onMessage("chatMessage", (msg: unknown) => received.push(msg));
+
+    client.send("sendChat", { text: "   " }); // 공백만
+    client.send("sendChat"); // payload 없음
+    client.send("sendChat", { text: 123 }); // 문자열 아님
+    await flush();
+
+    expect(received).toHaveLength(0);
+  });
+
+  it("대기실(waiting) 단계에서도 채팅을 보낼 수 있다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    const received: unknown[] = [];
+    client.onMessage("chatMessage", (msg: unknown) => received.push(msg));
+
+    expect(room.state.phase).toBe("waiting");
+    client.send("sendChat", { text: "대기실 채팅" });
+    await flush();
+
+    expect(received).toHaveLength(1);
+  });
+
   it("두 제한시간을 모두 짧게 두면 아무도 응답하지 않아도 게임이 계속 진행된다", async () => {
     const { room } = await setupFourPlayers(colyseus, { throwTimeoutMs: 20, moveTimeoutMs: 20 });
 

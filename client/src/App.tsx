@@ -3,6 +3,8 @@ import { WaitingRoom } from "./components/WaitingRoom";
 import { GameBoard } from "./components/GameBoard";
 import { TurnPanel } from "./components/TurnPanel";
 import { WinnerScreen } from "./components/WinnerScreen";
+import { ParticipantBar } from "./components/ParticipantBar";
+import { ChatInput } from "./components/ChatInput";
 import "./App.css";
 
 function App() {
@@ -17,20 +19,25 @@ function App() {
     );
   }
 
-  if (room.state.phase === "waiting") {
-    return <WaitingRoom room={room} />;
-  }
+  return (
+    <div>
+      {/* 대기실/플레이/종료 단계와 무관하게 항상 표시 — 채팅 말풍선이 뜰 자리 겸 채팅 입력창. */}
+      <ParticipantBar room={room} />
 
-  if (room.state.phase === "playing") {
-    return (
-      <div>
-        <GameBoard room={room} />
-        <TurnPanel room={room} />
-      </div>
-    );
-  }
+      {room.state.phase === "waiting" && <WaitingRoom room={room} />}
 
-  return <WinnerScreen room={room} />;
+      {room.state.phase === "playing" && (
+        <div>
+          <GameBoard room={room} />
+          <TurnPanel room={room} />
+        </div>
+      )}
+
+      {room.state.phase === "finished" && <WinnerScreen room={room} />}
+
+      <ChatInput room={room} />
+    </div>
+  );
 }
 
 export default App;
