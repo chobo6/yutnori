@@ -257,4 +257,45 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     const victim = room.state.pieces.find((p) => p.id === victimId)!;
     expect(victim.positionKind).toBe("start"); // 정상적으로 잡힘
   });
+
+  it("교주 보너스 전진이 새로 만든 잡힘에도 의사가 정상적으로 반응한다(메인 이동 도착 칸이 아니라 보너스 도착 칸)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"], // 팀A — 누가 첫 턴이든 교주가 움직인다
+        ["의사", "성직"],
+        ["의사", "성직"], // 팀B — clients[2]-0은 항상 의사
+      ],
+      { rng: () => 0 }, // 모든 확률 판정 성공(교주 보너스도, 의사 구조도)
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`;
+    const allyId = `${sessionId}-1`;
+    const victimId = `${clients[3].sessionId}-0`; // clients[3]는 항상 팀B
+    const uisaId = `${clients[2].sessionId}-0`; // clients[2]는 항상 팀B, 캐릭터 "의사"
+
+    placeAt(room, moverId, 3);
+    placeAt(room, allyId, 3); // 업기 발생 -> 메인 이동 도착 칸은 8
+    placeAt(room, victimId, 9); // 메인 도착 칸(8)이 아니라 보너스 도착 칸(9)에 배치
+    placeAt(room, uisaId, 7); // victim의 원래 칸(9)과 같은 줄(B: 6~10)
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    const ally = room.state.pieces.find((p) => p.id === allyId)!;
+    expect(mover.positionIndex).toBe(9); // 3 + 5(모) + 1(보너스)
+    expect(ally.positionIndex).toBe(9);
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("outer");
+    expect(victim.positionIndex).toBe(9); // 의사가 구조 — start로 보내지지 않고 원위치에 남는다
+  });
 });

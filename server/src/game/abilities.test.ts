@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyGyojuBonus, resolveCaptureResponses, type CaptureRecord, type Rng } from "./abilities";
 import type { Piece } from "./pieces";
+import type { Position } from "./position";
 
 const ALWAYS_SUCCEED: Rng = () => 0;
 const ALWAYS_FAIL: Rng = () => 0.99;
@@ -79,11 +80,26 @@ describe("applyGyojuBonus", () => {
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     expect(p1.position).toEqual({ kind: "outer", index: 9 }); // 정상 발동
   });
+
+  it("이동한 말(교주)이 이미 완주(finished)했다면 보너스 없이 그대로 반환한다 — moveForward 예외 방지", () => {
+    const pieces = [
+      { ...piece("p1", "alice", "A", "교주", 8), position: { kind: "finished" as const } },
+      piece("p2", "alice", "A", "성직", 8),
+    ];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    expect(result.pieces).toEqual(pieces);
+    expect(result.capturedPieceIds).toEqual([]);
+  });
 });
 
 describe("resolveCaptureResponses", () => {
-  function capture(pieceId: string, teamId: string, index: number): CaptureRecord {
-    return { pieceId, teamId, originalPosition: { kind: "outer", index } };
+  function capture(
+    pieceId: string,
+    teamId: string,
+    index: number,
+    originalPreviousPosition: Position = { kind: "start" },
+  ): CaptureRecord {
+    return { pieceId, teamId, originalPosition: { kind: "outer", index }, originalPreviousPosition };
   }
 
   it("잡힌 팀에 조건을 만족하는 의사가 있고 확률이 성공하면 원위치로 복원한다", () => {
@@ -173,5 +189,28 @@ describe("resolveCaptureResponses", () => {
     const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], rng);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 8 });
+  });
+
+  it("의사가 복원할 때 previousPosition도 잡히기 직전 값으로 되돌아간다(빽도 판정 정확성)", () => {
+    const pieces = [piece("victim", "bob", "B", "성직", 0), piece("uisa", "bob", "B", "의사", 7)];
+    pieces[0].position = { kind: "start" };
+    const priorPrevious: Position = { kind: "outer", index: 6 };
+    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8, priorPrevious)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "outer", index: 8 });
+    expect(victim.previousPosition).toEqual(priorPrevious); // originalPreviousPosition으로 복원
+  });
+
+  it("성직이 순간이동시킬 때 previousPosition도 도착지(성직 위치)와 같아진다(직후 빽도는 제자리)", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 12), // 다른 줄(C) — 의사는 제외되고 성직으로 넘어간다
+      piece("seongjik", "bob", "B", "성직", 15),
+    ];
+    pieces[0].position = { kind: "start" };
+    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "outer", index: 15 });
+    expect(victim.previousPosition).toEqual({ kind: "outer", index: 15 }); // 도착지와 동일 — 빽도는 no-op
   });
 });

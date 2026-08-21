@@ -16,6 +16,8 @@ export interface CaptureRecord {
   teamId: string;
   /** 잡히기 직전 위치 — 의사의 "같은 줄" 판정 기준이자, 무효화 시 복원할 좌표. */
   originalPosition: Position;
+  /** 잡히기 직전(이번 캡처 이전) previousPosition — 복원/순간이동 후 빽도 판정이 올바른 칸을 참조하도록 함께 갱신한다. */
+  originalPreviousPosition: Position;
 }
 
 export interface GyojuBonusResult {
@@ -37,7 +39,7 @@ function onBoard(position: Position): boolean {
  */
 function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosition: Position, rng: Rng): boolean {
   const enemyMadams = pieces.filter(
-    (p) => p.character === "마담" && p.teamId !== abilityOwnerTeamId && onBoard(p.position),
+    (p) => p.character === "마담" && p.teamId !== "" && p.teamId !== abilityOwnerTeamId && onBoard(p.position),
   );
   for (const madam of enemyMadams) {
     if (sameSide(madam.position, eventPosition) && roll(MADAM_BLOCK_CHANCE, rng)) {
@@ -59,7 +61,7 @@ export function applyGyojuBonus(
   rng: Rng,
 ): GyojuBonusResult {
   const mover = pieces.find((p) => p.id === moverId);
-  if (!mover || mover.character !== "교주" || piggybackedIds.length === 0) {
+  if (!mover || mover.character !== "교주" || piggybackedIds.length === 0 || !onBoard(mover.position)) {
     return { pieces, capturedPieceIds: [] };
   }
 
@@ -104,7 +106,11 @@ function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[] | n
   for (const uisa of candidates) {
     if (isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng)) continue;
     if (roll(UISA_CHANCE, rng)) {
-      return pieces.map((p) => (p.id === capture.pieceId ? { ...p, position: capture.originalPosition } : p));
+      return pieces.map((p) =>
+        p.id === capture.pieceId
+          ? { ...p, position: capture.originalPosition, previousPosition: capture.originalPreviousPosition }
+          : p,
+      );
     }
   }
   return null;
@@ -117,7 +123,9 @@ function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[]
   for (const seongjik of candidates) {
     if (isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng)) continue;
     if (roll(SEONGJIK_CHANCE, rng)) {
-      return pieces.map((p) => (p.id === capture.pieceId ? { ...p, position: seongjik.position } : p));
+      return pieces.map((p) =>
+        p.id === capture.pieceId ? { ...p, position: seongjik.position, previousPosition: seongjik.position } : p,
+      );
     }
   }
   return null;

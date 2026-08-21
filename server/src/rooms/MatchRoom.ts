@@ -27,9 +27,9 @@ export class MatchRoom extends Room<MatchState> {
 
   onCreate(options?: { throwTimeoutMs?: number; moveTimeoutMs?: number; rng?: Rng }) {
     this.setState(new MatchState());
-    if (options?.throwTimeoutMs) this.throwTimeoutMs = options.throwTimeoutMs;
-    if (options?.moveTimeoutMs) this.moveTimeoutMs = options.moveTimeoutMs;
-    if (options?.rng) this.rng = options.rng;
+    if (typeof options?.throwTimeoutMs === "number") this.throwTimeoutMs = options.throwTimeoutMs;
+    if (typeof options?.moveTimeoutMs === "number") this.moveTimeoutMs = options.moveTimeoutMs;
+    if (typeof options?.rng === "function") this.rng = options.rng;
 
     this.onMessage("pickTeam", (client, message: { team: "A" | "B" } | undefined) => {
       if (this.state.phase !== "waiting") return;
@@ -223,11 +223,21 @@ export class MatchRoom extends Room<MatchState> {
 
     const mainCaptureRecords: CaptureRecord[] = capturedPieceIds.map((id) => {
       const original = pieces.find((p) => p.id === id)!;
-      return { pieceId: id, teamId: original.teamId, originalPosition: original.position };
+      return {
+        pieceId: id,
+        teamId: original.teamId,
+        originalPosition: original.position,
+        originalPreviousPosition: original.previousPosition,
+      };
     });
     const bonusCaptureRecords: CaptureRecord[] = bonus.capturedPieceIds.map((id) => {
       const original = afterMove.find((p) => p.id === id)!;
-      return { pieceId: id, teamId: original.teamId, originalPosition: original.position };
+      return {
+        pieceId: id,
+        teamId: original.teamId,
+        originalPosition: original.position,
+        originalPreviousPosition: original.previousPosition,
+      };
     });
 
     const updated = resolveCaptureResponses(bonus.pieces, [...mainCaptureRecords, ...bonusCaptureRecords], this.rng);
