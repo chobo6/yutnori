@@ -36,12 +36,14 @@ export class MatchRoom extends Room<MatchState> {
       if (message?.team !== "A" && message?.team !== "B") return;
       const player = this.state.players.get(client.sessionId);
       if (player) player.team = message.team;
+      this.maybeStartGame();
     });
 
     this.onMessage("pickMode", (client, message: { mode: "2v2" | "1v1" } | undefined) => {
       if (this.state.phase !== "waiting") return;
       if (message?.mode !== "2v2" && message?.mode !== "1v1") return;
       this.state.mode = message.mode;
+      this.maybeStartGame();
     });
 
     this.onMessage("pickCharacters", (client, message: { characters: string[] } | undefined) => {
@@ -55,6 +57,7 @@ export class MatchRoom extends Room<MatchState> {
       if (!player) return;
       player.characters.clear();
       for (const c of message.characters) player.characters.push(c);
+      this.maybeStartGame();
     });
 
     this.onMessage("ready", (client) => {
@@ -127,6 +130,7 @@ export class MatchRoom extends Room<MatchState> {
   }
 
   private maybeStartGame() {
+    if (this.state.phase !== "waiting") return;
     const requiredPerTeam = this.state.mode === "1v1" ? 1 : 2;
     const requiredCharacters = this.state.mode === "1v1" ? 4 : 2;
     const piecesPerPlayer = this.state.mode === "1v1" ? 4 : 2;

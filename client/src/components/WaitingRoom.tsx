@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Room } from "colyseus.js";
 import { CHARACTERS, type CharacterId, type MatchState } from "../game/matchTypes";
 import { playerLabel } from "../game/playerLabel";
@@ -18,6 +18,18 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
   const requiredPerTeam = mode === "1v1" ? 1 : 2;
   const requiredCharacters = mode === "1v1" ? 4 : 2;
   const totalRequired = requiredPerTeam * 2;
+
+  // 1v1 캐릭터 드롭다운은 이미 기본값(교주 4개)이 화면에 채워져 있어, 사용자가 직접 건드리지
+  // 않으면 그 값이 서버로 전송된 적이 없다 — updateSlot(onChange)만이 유일한 송신 경로였기 때문.
+  // 화면에 보이는 기본값과 서버 상태(캐릭터: 미정)가 어긋나는 걸 막기 위해, 1v1 모드이고 아직
+  // 서버에 4개가 기록되지 않았다면 현재 슬롯 값을 자동으로 한 번 보낸다. 서버가 받아 반영하면
+  // me.characters.length가 4가 되어 조건이 꺼지므로 반복 전송되지 않는다(자기 종료형).
+  useEffect(() => {
+    if (mode === "1v1" && (me?.characters.length ?? 0) !== 4) {
+      room.send("pickCharacters", { characters: slotCharacters });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, me?.characters.length]);
 
   function pickMode(nextMode: "2v2" | "1v1") {
     room.send("pickMode", { mode: nextMode });
@@ -161,7 +173,8 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
         )}
         {players.length === totalRequired && teamSplitOk && charactersMissing > 0 && (
           <p>
-            모두 캐릭터를 {requiredCharacters}종씩 골라야 게임이 시작됩니다 (아직 {charactersMissing}명 미완료)
+            모두 캐릭터를 {mode === "1v1" ? `${requiredCharacters}개` : `${requiredCharacters}종`} 골라야 게임이
+            시작됩니다 (아직 {charactersMissing}명 미완료)
           </p>
         )}
         <ul>

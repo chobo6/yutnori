@@ -94,6 +94,54 @@ describe("MatchRoom", () => {
     expect(room.state.phase).toBe("waiting");
   });
 
+  it("1v1 모드에서 두 명 다 같은 팀을 고르면(팀 분배가 안 맞으면) 게임이 시작되지 않는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clientA = await colyseus.connectTo(room);
+    const clientB = await colyseus.connectTo(room);
+
+    clientA.send("pickMode", { mode: "1v1" });
+    await flush();
+
+    clientA.send("pickTeam", { team: "A" });
+    clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    clientB.send("pickTeam", { team: "A" });
+    clientB.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    await flush();
+
+    clientA.send("ready", {});
+    clientB.send("ready", {});
+    await flush();
+
+    expect(room.state.phase).toBe("waiting");
+  });
+
+  it("ready 이후 마지막 조건(pickCharacters)이 채워지면 추가 ready 없이도 게임이 시작된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const clientA = await colyseus.connectTo(room);
+    const clientB = await colyseus.connectTo(room);
+
+    clientA.send("pickMode", { mode: "1v1" });
+    await flush();
+
+    clientA.send("pickTeam", { team: "A" });
+    clientB.send("pickTeam", { team: "B" });
+    clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    await flush();
+
+    clientA.send("ready", {});
+    clientB.send("ready", {});
+    await flush();
+
+    // B가 아직 캐릭터를 안 골라 시작 조건 미충족 -> waiting 유지
+    expect(room.state.phase).toBe("waiting");
+
+    // 마지막 조건(B의 캐릭터 선택)이 채워지는 순간 - 추가 ready 없이 바로 시작되어야 한다
+    clientB.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
+    await flush();
+
+    expect(room.state.phase).toBe("playing");
+  });
+
   it("게임 시작 시 각 말에 플레이어가 고른 캐릭터가 순서대로 배정된다", async () => {
     const { room } = await setupFourPlayers(colyseus);
     const players = Array.from(room.state.players.values());
