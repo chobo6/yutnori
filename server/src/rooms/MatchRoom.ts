@@ -38,10 +38,19 @@ export class MatchRoom extends Room<MatchState> {
       if (player) player.team = message.team;
     });
 
+    this.onMessage("pickMode", (client, message: { mode: "2v2" | "1v1" } | undefined) => {
+      if (this.state.phase !== "waiting") return;
+      if (message?.mode !== "2v2" && message?.mode !== "1v1") return;
+      this.state.mode = message.mode;
+    });
+
     this.onMessage("pickCharacters", (client, message: { characters: string[] } | undefined) => {
       if (this.state.phase !== "waiting") return;
       if (!Array.isArray(message?.characters)) return;
-      if (message.characters.length !== 2 || !message.characters.every((c) => VALID_CHARACTERS.has(c))) return;
+      const requiredCount = this.state.mode === "1v1" ? 4 : 2;
+      if (message.characters.length !== requiredCount) return;
+      if (!message.characters.every((c) => VALID_CHARACTERS.has(c))) return;
+      if (this.state.mode !== "1v1" && new Set(message.characters).size !== message.characters.length) return;
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
       player.characters.clear();

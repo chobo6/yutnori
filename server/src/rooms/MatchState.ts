@@ -21,6 +21,7 @@ export class PieceSchema extends Schema {
 
 export class MatchState extends Schema {
   @type("string") phase: string = "waiting"; // "waiting" | "playing" | "finished"
+  @type("string") mode: string = "2v2"; // "2v2" | "1v1"
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
   @type([PieceSchema]) pieces = new ArraySchema<PieceSchema>();
   @type(["string"]) turnOrder = new ArraySchema<string>();

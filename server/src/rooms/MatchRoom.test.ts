@@ -210,6 +210,70 @@ describe("MatchRoom", () => {
     expect(room.state.players.get(client.sessionId)!.team).toBe("A");
   });
 
+  it("pickMode로 모드를 바꿀 수 있다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    expect(room.state.mode).toBe("2v2");
+    client.send("pickMode", { mode: "1v1" });
+    await flush();
+    expect(room.state.mode).toBe("1v1");
+  });
+
+  it("잘못된 mode 값은 무시된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    client.send("pickMode", { mode: "3v3" });
+    await flush();
+    expect(room.state.mode).toBe("2v2");
+  });
+
+  it("1v1 모드에서는 캐릭터 4종을 골라야 반영된다(2종은 무시)", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    client.send("pickMode", { mode: "1v1" });
+    await flush();
+    client.send("pickCharacters", { characters: ["교주", "성직"] });
+    await flush();
+    expect(room.state.players.get(client.sessionId)!.characters.length).toBe(0);
+
+    client.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    await flush();
+    expect(Array.from(room.state.players.get(client.sessionId)!.characters)).toEqual([
+      "교주",
+      "성직",
+      "마담",
+      "의사",
+    ]);
+  });
+
+  it("1v1 모드에서는 캐릭터 중복이 허용된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    client.send("pickMode", { mode: "1v1" });
+    await flush();
+    client.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
+    await flush();
+    expect(Array.from(room.state.players.get(client.sessionId)!.characters)).toEqual([
+      "의사",
+      "의사",
+      "마담",
+      "마담",
+    ]);
+  });
+
+  it("2v2 모드(기본값)에서는 캐릭터 중복이 거부된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await colyseus.connectTo(room);
+
+    client.send("pickCharacters", { characters: ["교주", "교주"] });
+    await flush();
+    expect(room.state.players.get(client.sessionId)!.characters.length).toBe(0);
+  });
+
   it("핸들러 안에서 예외가 나도 onUncaughtException이 막아 방이 살아남는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
     const client = await colyseus.connectTo(room);
