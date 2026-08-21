@@ -11,6 +11,8 @@ export class PlayerState extends Schema {
 export class PieceSchema extends Schema {
   @type("string") id: string = "";
   @type("string") ownerSessionId: string = "";
+  /** 이 말에 고정 배정된 캐릭터("교주"|"성직"|"마담"|"의사") — 능력 판정은 abilities.ts 참고. */
+  @type("string") character: string = "";
   @type("string") positionKind: string = "start"; // "start" | "outer" | "center" | "finished"
   @type("number") positionIndex: number = -1;
   @type("string") previousPositionKind: string = "start";

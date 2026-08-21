@@ -49,6 +49,17 @@ describe("MatchRoom", () => {
     expect(room.state.turnOrder.length).toBe(4);
   });
 
+  it("게임 시작 시 각 말에 플레이어가 고른 캐릭터가 순서대로 배정된다", async () => {
+    const { room } = await setupFourPlayers(colyseus);
+    const players = Array.from(room.state.players.values());
+    for (const player of players) {
+      const piece0 = room.state.pieces.find((p) => p.id === `${player.sessionId}-0`)!;
+      const piece1 = room.state.pieces.find((p) => p.id === `${player.sessionId}-1`)!;
+      expect(piece0.character).toBe(player.characters[0]);
+      expect(piece1.character).toBe(player.characters[1]);
+    }
+  });
+
   it("현재 턴 플레이어가 아니면 throwStart가 무시된다", async () => {
     const { room, clients } = await setupFourPlayers(colyseus);
     const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];

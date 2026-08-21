@@ -103,6 +103,7 @@ export class MatchRoom extends Room<MatchState> {
       id: p.id,
       ownerId: p.ownerSessionId,
       teamId: this.state.players.get(p.ownerSessionId)?.team ?? "",
+      character: p.character,
       position: fromSchemaPosition(p.positionKind, p.positionIndex),
       previousPosition: fromSchemaPosition(p.previousPositionKind, p.previousPositionIndex),
     }));
@@ -128,10 +129,12 @@ export class MatchRoom extends Room<MatchState> {
 
     this.state.pieces.clear();
     for (const sessionId of [...teamA, ...teamB]) {
+      const owner = this.state.players.get(sessionId)!;
       for (let i = 0; i < 2; i++) {
         const piece = new PieceSchema();
         piece.id = `${sessionId}-${i}`;
         piece.ownerSessionId = sessionId;
+        piece.character = owner.characters[i];
         piece.positionKind = "start";
         piece.positionIndex = -1;
         piece.previousPositionKind = "start";
