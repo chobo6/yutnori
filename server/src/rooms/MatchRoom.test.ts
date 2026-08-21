@@ -6,8 +6,8 @@ import { MatchState } from "./MatchState";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
-async function setupFourPlayers(colyseus: ColyseusTestServer) {
-  const room = await colyseus.createRoom<MatchState>("match", {});
+async function setupFourPlayers(colyseus: ColyseusTestServer, options: Record<string, unknown> = {}) {
+  const room = await colyseus.createRoom<MatchState>("match", options);
   const clients = await Promise.all([
     colyseus.connectTo(room),
     colyseus.connectTo(room),
@@ -205,7 +205,7 @@ describe("MatchRoom", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // 어떤 이유로든 핸들러 내부에서 예외가 터지는 상황을 강제한다.
-    (room as unknown as { handleMovePiece: () => void }).handleMovePiece = () => {
+    (room as unknown as { performMove: () => void }).performMove = () => {
       throw new Error("의도적으로 발생시킨 예외");
     };
     client.send("movePiece", { pieceId: "x" });
@@ -218,5 +218,98 @@ describe("MatchRoom", () => {
     client.send("pickTeam", { team: "B" });
     await flush();
     expect(room.state.players.get(client.sessionId)!.team).toBe("B");
+  });
+
+  // setupFourPlayers 자체가 flush(50)를 두 번 거치므로(팀/캐릭터 확정 + ready), 게임 시작 시점에
+  // 걸리는 첫 던지기 타이머는 테스트 본문이 시작될 때 이미 ~50~100ms가 흐른 뒤다. 아래 타이머
+  // 테스트들은 이 오버헤드보다 확실히 큰 제한시간(400ms)을 써서 "아직 안 끝남" 상태를 안정적으로
+  // 관찰하고, 그보다 한참 뒤(500ms 추가)에 "끝남" 상태를 관찰한다.
+  const SAFE_TIMEOUT_MS = 400;
+  const SAFE_WAIT_MS = 500;
+
+  it("던지기 제한시간을 넘기면 자동으로 무작위 결과가 던져진다", async () => {
+    const { room } = await setupFourPlayers(colyseus, {
+      throwTimeoutMs: SAFE_TIMEOUT_MS,
+      moveTimeoutMs: 5000,
+    });
+
+    expect(room.state.gaugePhase).toBe("idle"); // 아직 아무도 안 눌렀다
+
+    await flush(SAFE_WAIT_MS);
+
+    expect(room.state.gaugePhase).toBe("resolved");
+    expect(room.state.lastThrowResult).not.toBe("");
+  });
+
+  it("게이지를 누르기만 하고 떼지 않아도(charging 상태) 던지기 제한시간이 지나면 자동 처리된다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus, {
+      throwTimeoutMs: SAFE_TIMEOUT_MS,
+      moveTimeoutMs: 5000,
+    });
+    const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
+
+    turnClient.send("throwStart", {});
+    await flush(10);
+    expect(room.state.gaugePhase).toBe("charging");
+
+    await flush(SAFE_WAIT_MS); // 누른 채로 제한시간을 넘김 — throwRelease를 안 보냈다
+
+    expect(room.state.gaugePhase).toBe("resolved");
+    expect(room.state.lastThrowResult).not.toBe("");
+  });
+
+  it("정상적으로 제한시간 안에 던지면 시간초과 자동 던지기가 나중에 다시 발동하지 않는다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus, {
+      throwTimeoutMs: SAFE_TIMEOUT_MS,
+      moveTimeoutMs: 5000,
+    });
+    const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
+
+    turnClient.send("throwStart", {});
+    await flush(5);
+    turnClient.send("throwRelease", {}); // 제한시간 안에 직접 던짐
+    await flush();
+
+    const resultRightAfterRelease = room.state.lastThrowResult;
+    expect(resultRightAfterRelease).not.toBe("");
+
+    await flush(SAFE_WAIT_MS); // 원래 throwTimeout이 발동했을 시점을 넉넉히 지남
+
+    // autoThrow가 뒤늦게 발동해 결과를 덮어쓰지 않았어야 한다 (토큰 가드)
+    expect(room.state.lastThrowResult).toBe(resultRightAfterRelease);
+    expect(room.state.gaugePhase).toBe("resolved");
+  });
+
+  it("말 선택 제한시간을 넘기면 완주하지 않은 말이 자동으로 이동하고 턴이 넘어간다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus, {
+      throwTimeoutMs: 5000,
+      moveTimeoutMs: SAFE_TIMEOUT_MS,
+    });
+    const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
+
+    turnClient.send("throwStart", {});
+    await flush();
+    turnClient.send("throwRelease", {}); // 직접 던지고, 말 선택은 일부러 안 보낸다
+    await flush();
+    expect(room.state.gaugePhase).toBe("resolved");
+
+    await flush(SAFE_WAIT_MS); // 말 선택 제한시간을 넉넉히 넘김
+
+    expect(room.state.gaugePhase).toBe("idle"); // 자동 이동까지 완료되어 다시 idle
+    expect(room.state.lastThrowResult).toBe("");
+    expect(room.state.phase).toBe("playing"); // 방은 계속 진행 중
+  });
+
+  it("두 제한시간을 모두 짧게 두면 아무도 응답하지 않아도 게임이 계속 진행된다", async () => {
+    const { room } = await setupFourPlayers(colyseus, { throwTimeoutMs: 20, moveTimeoutMs: 20 });
+
+    // 던지기/말선택 사이클이 반복될 시간을 넉넉히 준다. 매 사이클의 정확한 위상(resolved 순간에
+    // 걸릴지 idle 순간에 걸릴지)은 Colyseus의 patch-tick 주기에 따라 흔들릴 수 있으므로, 특정
+    // gaugePhase 스냅샷이 아니라 "누적된 진행"을 확인한다 — 사람 입력 없이도 말이 실제로 움직였는가.
+    await flush(500);
+
+    const stillAllAtStart = room.state.pieces.every((p) => p.positionKind === "start");
+    expect(stillAllAtStart).toBe(false); // 최소 한 번은 자동으로 말이 움직였어야 한다
+    expect(room.state.phase).toBe("playing"); // 이 정도 시간으로는 아직 승부가 나지 않는다
   });
 });

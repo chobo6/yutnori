@@ -27,6 +27,8 @@ export class MatchState extends Schema {
   @type("number") throwStartAt: number = 0;
   /** 직전 던지기 결과(YutResult). 아직 던지지 않았거나 이동을 마쳐 소진되면 "". */
   @type("string") lastThrowResult: string = "";
+  /** 현재 턴(던지기 또는 말 선택) 제한시간이 끝나는 절대 시각(ms epoch). 활성 제한이 없으면 0. */
+  @type("number") turnDeadlineAt: number = 0;
   @type("string") winnerSessionId: string = "";
 }
 

@@ -1,17 +1,30 @@
 import { Room, Client } from "colyseus";
 import { applyMove, type Piece } from "../game/pieces";
-import { resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
+import { DEFAULT_GAUGE_CYCLE_MS, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
 import { MatchState, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
+const DEFAULT_THROW_TIMEOUT_MS = 5000;
+const DEFAULT_MOVE_TIMEOUT_MS = 5000;
 
 export class MatchRoom extends Room<MatchState> {
   maxClients = 4;
   private pendingThrows = new Map<string, YutResult>();
+  /**
+   * 현재 활성 타이머(던지기 또는 말 선택)를 구분하는 토큰. 새 타이머를 걸 때마다 증가시키고,
+   * 타이머 콜백이 실행될 때 자신이 걸릴 당시의 토큰과 현재 값을 비교한다 — 이미 실제 행동으로
+   * 더 앞서 나간 상태라면(값이 달라짐) 오래된 타이머는 조용히 무시된다. 별도의 타이머 취소
+   * 호출 없이도 오작동을 막을 수 있는 songpyeon과 동일한 패턴.
+   */
+  private turnToken = 0;
+  private throwTimeoutMs = DEFAULT_THROW_TIMEOUT_MS;
+  private moveTimeoutMs = DEFAULT_MOVE_TIMEOUT_MS;
 
-  onCreate() {
+  onCreate(options?: { throwTimeoutMs?: number; moveTimeoutMs?: number }) {
     this.setState(new MatchState());
+    if (options?.throwTimeoutMs) this.throwTimeoutMs = options.throwTimeoutMs;
+    if (options?.moveTimeoutMs) this.moveTimeoutMs = options.moveTimeoutMs;
 
     this.onMessage("pickTeam", (client, message: { team: "A" | "B" } | undefined) => {
       if (this.state.phase !== "waiting") return;
@@ -47,15 +60,12 @@ export class MatchRoom extends Room<MatchState> {
     this.onMessage("throwRelease", (client) => {
       if (!this.isCurrentTurn(client.sessionId) || this.state.gaugePhase !== "charging") return;
       const result = resolveThrow(this.state.throwStartAt, Date.now());
-      this.pendingThrows.set(client.sessionId, result);
-      this.state.lastThrowResult = result;
-      // "resolved" 상태에서는 throwStart 가드에 걸려 재던지기가 불가능하다 (이동해야 다시 idle).
-      this.state.gaugePhase = "resolved";
+      this.resolveThrowFor(client.sessionId, result);
     });
 
     this.onMessage("movePiece", (client, message: { pieceId: string; useShortcut?: boolean } | undefined) => {
       if (!message || typeof message.pieceId !== "string") return;
-      this.handleMovePiece(client, message);
+      this.performMove(client.sessionId, message.pieceId, message.useShortcut ?? false);
     });
   }
 
@@ -121,21 +131,68 @@ export class MatchRoom extends Room<MatchState> {
     }
 
     this.state.phase = "playing";
+    this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 
-  private handleMovePiece(client: Client, message: { pieceId: string; useShortcut?: boolean }) {
-    if (!this.isCurrentTurn(client.sessionId)) return;
-    const result = this.pendingThrows.get(client.sessionId);
+  /** 실제 throwRelease와 시간초과 자동 던지기가 공유하는 "결과 확정" 로직. */
+  private resolveThrowFor(sessionId: string, result: YutResult) {
+    this.pendingThrows.set(sessionId, result);
+    this.state.lastThrowResult = result;
+    // "resolved" 상태에서는 throwStart 가드에 걸려 재던지기가 불가능하다 (이동해야 다시 idle).
+    this.state.gaugePhase = "resolved";
+    this.armMoveTimeout(sessionId);
+  }
+
+  /** 던지기 제한시간(REQUIREMENTS.md §4.1) — 안 누르거나, 누르고 안 뗀 경우 둘 다 이 타이머로 처리된다. */
+  private armThrowTimeout(sessionId: string) {
+    const token = ++this.turnToken;
+    this.state.turnDeadlineAt = Date.now() + this.throwTimeoutMs;
+    this.clock.setTimeout(() => {
+      if (token !== this.turnToken) return; // 이미 다른 행동으로 앞서 나간 오래된 타이머
+      this.autoThrow(sessionId);
+    }, this.throwTimeoutMs);
+  }
+
+  /** 말 선택 제한시간(REQUIREMENTS.md §4.1) — 던지기가 끝난 시점부터 새로 카운트. */
+  private armMoveTimeout(sessionId: string) {
+    const token = ++this.turnToken;
+    this.state.turnDeadlineAt = Date.now() + this.moveTimeoutMs;
+    this.clock.setTimeout(() => {
+      if (token !== this.turnToken) return;
+      this.autoMove(sessionId);
+    }, this.moveTimeoutMs);
+  }
+
+  /** 던지기 제한시간 초과 — §5의 확률 분포를 그대로 따르는 무작위 결과로 대신 던진다. */
+  private autoThrow(sessionId: string) {
+    if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase === "resolved") return;
+    const randomElapsed = Math.random() * DEFAULT_GAUGE_CYCLE_MS;
+    const result = resolveThrow(0, randomElapsed);
+    this.resolveThrowFor(sessionId, result);
+  }
+
+  /** 말 선택 제한시간 초과 — 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다. */
+  private autoMove(sessionId: string) {
+    if (!this.isCurrentTurn(sessionId)) return;
+    const target = this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+    if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
+    this.performMove(sessionId, target.id, false);
+  }
+
+  /** 실제 movePiece와 시간초과 자동 말 선택이 공유하는 "이동 실행" 로직. */
+  private performMove(sessionId: string, pieceId: string, useShortcut: boolean) {
+    if (!this.isCurrentTurn(sessionId)) return;
+    const result = this.pendingThrows.get(sessionId);
     if (!result) return;
 
-    const targetPiece = this.state.pieces.find((p) => p.id === message.pieceId);
-    if (!targetPiece || targetPiece.ownerSessionId !== client.sessionId) return;
+    const targetPiece = this.state.pieces.find((p) => p.id === pieceId);
+    if (!targetPiece || targetPiece.ownerSessionId !== sessionId) return;
     // 이미 완주한 말은 이동 대상이 될 수 없다 (applyMove가 예외를 던진다).
     if (targetPiece.positionKind === "finished") return;
 
     const pieces: Piece[] = this.toGamePieces();
 
-    const { pieces: updated } = applyMove(pieces, message.pieceId, YUT_STEPS[result], message.useShortcut ?? false);
+    const { pieces: updated } = applyMove(pieces, pieceId, YUT_STEPS[result], useShortcut);
 
     for (const updatedPiece of updated) {
       const schemaPiece = this.state.pieces.find((p) => p.id === updatedPiece.id)!;
@@ -148,15 +205,16 @@ export class MatchRoom extends Room<MatchState> {
     }
 
     // 던지기 결과 소진 — 서버 기록(pendingThrows)과 동기화 상태(lastThrowResult)를 항상 함께 비운다.
-    this.pendingThrows.delete(client.sessionId);
+    this.pendingThrows.delete(sessionId);
     this.state.lastThrowResult = "";
     this.state.gaugePhase = "idle";
 
     const finalPieces: Piece[] = this.toGamePieces();
 
-    if (checkWinner(finalPieces, client.sessionId)) {
+    if (checkWinner(finalPieces, sessionId)) {
       this.state.phase = "finished";
-      this.state.winnerSessionId = client.sessionId;
+      this.state.winnerSessionId = sessionId;
+      this.state.turnDeadlineAt = 0;
       return;
     }
 
@@ -165,5 +223,6 @@ export class MatchRoom extends Room<MatchState> {
       Array.from(this.state.turnOrder),
       result,
     );
+    this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 }
