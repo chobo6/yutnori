@@ -9,6 +9,19 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
   const [pendingCharacters, setPendingCharacters] = useState<CharacterId[]>(
     (me?.characters ?? []) as CharacterId[],
   );
+  const [slotCharacters, setSlotCharacters] = useState<CharacterId[]>(() => {
+    const existing = (me?.characters ?? []) as CharacterId[];
+    return existing.length === 4 ? existing : [CHARACTERS[0], CHARACTERS[0], CHARACTERS[0], CHARACTERS[0]];
+  });
+
+  const mode = room.state.mode;
+  const requiredPerTeam = mode === "1v1" ? 1 : 2;
+  const requiredCharacters = mode === "1v1" ? 4 : 2;
+  const totalRequired = requiredPerTeam * 2;
+
+  function pickMode(nextMode: "2v2" | "1v1") {
+    room.send("pickMode", { mode: nextMode });
+  }
 
   function pickTeam(team: "A" | "B") {
     room.send("pickTeam", { team });
@@ -36,22 +49,49 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
     });
   }
 
+  function updateSlot(index: number, character: CharacterId) {
+    setSlotCharacters((prev) => {
+      const next = [...prev];
+      next[index] = character;
+      room.send("pickCharacters", { characters: next });
+      return next;
+    });
+  }
+
   function toggleReady() {
     room.send("ready", {});
   }
 
   const players = Array.from(room.state.players.values());
 
-  // 서버 maybeStartGame은 4명이 2/2로 나뉘고 각자 캐릭터 2종을 골라야만 시작한다.
+  // 서버 maybeStartGame은 팀이 모드에 맞는 인원으로 나뉘고 각자 캐릭터를 다 골라야만 시작한다.
   // 조건이 안 맞으면 아무 일도 없이 조용히 넘어가므로, 왜 안 시작하는지 여기서 알려준다.
   const teamACount = players.filter((p) => p.team === "A").length;
   const teamBCount = players.filter((p) => p.team === "B").length;
-  const teamSplitOk = teamACount === 2 && teamBCount === 2;
-  const charactersMissing = players.filter((p) => p.characters.length !== 2).length;
+  const teamSplitOk = teamACount === requiredPerTeam && teamBCount === requiredPerTeam;
+  const charactersMissing = players.filter((p) => p.characters.length !== requiredCharacters).length;
 
   return (
     <div className={styles.wrap}>
       <h2>대기실</h2>
+
+      <section>
+        <h3>모드 선택</h3>
+        <button
+          type="button"
+          className={mode === "2v2" ? styles.selected : undefined}
+          onClick={() => pickMode("2v2")}
+        >
+          2v2
+        </button>
+        <button
+          type="button"
+          className={mode === "1v1" ? styles.selected : undefined}
+          onClick={() => pickMode("1v1")}
+        >
+          1v1
+        </button>
+      </section>
 
       <section>
         <h3>팀 선택</h3>
@@ -71,19 +111,37 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
         </button>
       </section>
 
-      <section>
-        <h3>캐릭터 선택 (2종)</h3>
-        {CHARACTERS.map((character) => (
-          <button
-            key={character}
-            type="button"
-            className={pendingCharacters.includes(character) ? styles.selected : undefined}
-            onClick={() => toggleCharacter(character)}
-          >
-            {character}
-          </button>
-        ))}
-      </section>
+      {mode === "2v2" ? (
+        <section>
+          <h3>캐릭터 선택 (2종)</h3>
+          {CHARACTERS.map((character) => (
+            <button
+              key={character}
+              type="button"
+              className={pendingCharacters.includes(character) ? styles.selected : undefined}
+              onClick={() => toggleCharacter(character)}
+            >
+              {character}
+            </button>
+          ))}
+        </section>
+      ) : (
+        <section>
+          <h3>캐릭터 선택 (말 4개, 중복 가능)</h3>
+          {slotCharacters.map((character, index) => (
+            <label key={index}>
+              말 {index + 1}:{" "}
+              <select value={character} onChange={(e) => updateSlot(index, e.target.value as CharacterId)}>
+                {CHARACTERS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </section>
+      )}
 
       <section>
         <button type="button" onClick={toggleReady}>
@@ -92,14 +150,19 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
       </section>
 
       <section>
-        <h3>참가자 ({players.length}/4)</h3>
-        {players.length === 4 && !teamSplitOk && (
+        <h3>
+          참가자 ({players.length}/{totalRequired})
+        </h3>
+        {players.length === totalRequired && !teamSplitOk && (
           <p>
-            A팀 2명 / B팀 2명이 되어야 게임이 시작됩니다 (현재 A팀 {teamACount}명, B팀 {teamBCount}명)
+            A팀 {requiredPerTeam}명 / B팀 {requiredPerTeam}명이 되어야 게임이 시작됩니다 (현재 A팀 {teamACount}명,
+            B팀 {teamBCount}명)
           </p>
         )}
-        {players.length === 4 && teamSplitOk && charactersMissing > 0 && (
-          <p>모두 캐릭터를 2종씩 골라야 게임이 시작됩니다 (아직 {charactersMissing}명 미완료)</p>
+        {players.length === totalRequired && teamSplitOk && charactersMissing > 0 && (
+          <p>
+            모두 캐릭터를 {requiredCharacters}종씩 골라야 게임이 시작됩니다 (아직 {charactersMissing}명 미완료)
+          </p>
         )}
         <ul>
           {players.map((player) => (

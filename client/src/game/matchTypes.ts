@@ -19,6 +19,7 @@ export interface PieceState {
 
 export interface MatchState {
   phase: "waiting" | "playing" | "finished";
+  mode: "2v2" | "1v1";
   players: Map<string, PlayerState>;
   pieces: PieceState[];
   turnOrder: string[];
