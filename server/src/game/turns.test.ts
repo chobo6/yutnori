@@ -7,6 +7,11 @@ describe("buildTurnOrder", () => {
     const order = buildTurnOrder(["a1", "a2"], ["b1", "b2"]);
     expect(order).toEqual(["a1", "b1", "a2", "b2"]);
   });
+
+  it("팀당 1명씩(1v1)이면 [A0, B0] 순서다", () => {
+    const order = buildTurnOrder(["a1"], ["b1"]);
+    expect(order).toEqual(["a1", "b1"]);
+  });
 });
 
 describe("nextTurnIndex", () => {
@@ -50,5 +55,25 @@ describe("checkWinner", () => {
   it("다른 사람 말이 완주해도 이 owner의 승리로 치지 않는다", () => {
     const pieces = [finishedPiece("p1", "bob"), finishedPiece("p2", "bob")];
     expect(checkWinner(pieces, "alice")).toBe(false);
+  });
+
+  it("1v1처럼 말 4개를 조종하는 경우, 4개 중 하나라도 안 끝나면 아직 승리 아님", () => {
+    const pieces = [
+      finishedPiece("p1", "alice"),
+      finishedPiece("p2", "alice"),
+      finishedPiece("p3", "alice"),
+      unfinishedPiece("p4", "alice"),
+    ];
+    expect(checkWinner(pieces, "alice")).toBe(false);
+  });
+
+  it("말 4개가 전부 완주하면 승리한다", () => {
+    const pieces = [
+      finishedPiece("p1", "alice"),
+      finishedPiece("p2", "alice"),
+      finishedPiece("p3", "alice"),
+      finishedPiece("p4", "alice"),
+    ];
+    expect(checkWinner(pieces, "alice")).toBe(true);
   });
 });
