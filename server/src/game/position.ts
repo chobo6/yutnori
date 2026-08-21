@@ -46,3 +46,24 @@ export function moveBackward(from: Position, previousPosition: Position): Positi
   }
   return previousPosition;
 }
+
+export type Side = "A" | "B" | "C" | "D";
+
+const SIDE_RANGES: Array<{ side: Side; min: number; max: number }> = [
+  { side: "A", min: 1, max: 5 },
+  { side: "B", min: 6, max: 10 },
+  { side: "C", min: 11, max: 15 },
+  { side: "D", min: 16, max: 19 },
+];
+
+/** 보드를 4개의 "변"으로 나눈다(캐릭터 능력의 "같은 줄" 판정용). start/center/finished는 어느 변에도 속하지 않는다. */
+export function sideOf(position: Position): Side | null {
+  if (position.kind !== "outer") return null;
+  const range = SIDE_RANGES.find((r) => position.index >= r.min && position.index <= r.max);
+  return range?.side ?? null;
+}
+
+export function sameSide(a: Position, b: Position): boolean {
+  const sideA = sideOf(a);
+  return sideA !== null && sideA === sideOf(b);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveBackward, moveForward, type Position } from "./position";
+import { moveBackward, moveForward, sameSide, sideOf, type Position } from "./position";
 
 describe("moveForward", () => {
   it("출발 전 말이 도(1)를 던지면 외곽 1번 칸으로 이동한다", () => {
@@ -66,5 +66,49 @@ describe("moveBackward", () => {
 
   it("완주한 말은 빽도로도 되살아나지 않고 에러를 던진다", () => {
     expect(() => moveBackward({ kind: "finished" }, { kind: "outer", index: 19 })).toThrow();
+  });
+});
+
+describe("sideOf", () => {
+  it("outer 1~5는 A", () => {
+    expect(sideOf({ kind: "outer", index: 1 })).toBe("A");
+    expect(sideOf({ kind: "outer", index: 5 })).toBe("A");
+  });
+
+  it("outer 6~10은 B", () => {
+    expect(sideOf({ kind: "outer", index: 6 })).toBe("B");
+    expect(sideOf({ kind: "outer", index: 10 })).toBe("B");
+  });
+
+  it("outer 11~15는 C", () => {
+    expect(sideOf({ kind: "outer", index: 11 })).toBe("C");
+    expect(sideOf({ kind: "outer", index: 15 })).toBe("C");
+  });
+
+  it("outer 16~19는 D", () => {
+    expect(sideOf({ kind: "outer", index: 16 })).toBe("D");
+    expect(sideOf({ kind: "outer", index: 19 })).toBe("D");
+  });
+
+  it("start/center/finished는 어느 변에도 속하지 않는다", () => {
+    expect(sideOf({ kind: "start" })).toBeNull();
+    expect(sideOf({ kind: "center" })).toBeNull();
+    expect(sideOf({ kind: "finished" })).toBeNull();
+  });
+});
+
+describe("sameSide", () => {
+  it("같은 변이면 true", () => {
+    expect(sameSide({ kind: "outer", index: 2 }, { kind: "outer", index: 4 })).toBe(true);
+  });
+
+  it("다른 변이면 false", () => {
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "outer", index: 6 })).toBe(false);
+  });
+
+  it("둘 중 하나라도 변이 없으면(start/center/finished) false", () => {
+    expect(sameSide({ kind: "start" }, { kind: "outer", index: 3 })).toBe(false);
+    expect(sameSide({ kind: "outer", index: 3 }, { kind: "center" })).toBe(false);
+    expect(sameSide({ kind: "finished" }, { kind: "start" })).toBe(false);
   });
 });
