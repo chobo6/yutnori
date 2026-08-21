@@ -1,0 +1,260 @@
+// server/src/rooms/MatchRoom.abilities.test.ts
+import { boot, ColyseusTestServer } from "@colyseus/testing";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { createGameServer } from "../createServer";
+import { MatchState } from "./MatchState";
+
+function flush(ms = 20) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** wavePosition 상승 초입 근처를 노려 "모"(5칸) 결과를 안정적으로 얻는다 — 기존 테스트와 동일한 관례. */
+const MO_TIMING_MS = 5;
+
+async function setupTeams(
+  colyseus: ColyseusTestServer,
+  characterPicks: [string, string][],
+  roomOptions: Record<string, unknown> = {},
+) {
+  const room = await colyseus.createRoom<MatchState>("match", roomOptions);
+  const clients = await Promise.all([
+    colyseus.connectTo(room),
+    colyseus.connectTo(room),
+    colyseus.connectTo(room),
+    colyseus.connectTo(room),
+  ]);
+
+  const teams = ["A", "A", "B", "B"];
+  for (let i = 0; i < 4; i++) {
+    clients[i].send("pickTeam", { team: teams[i] });
+    clients[i].send("pickCharacters", { characters: characterPicks[i] });
+  }
+  await flush();
+  for (const client of clients) client.send("ready", {});
+  await flush();
+
+  return { room, clients };
+}
+
+function placeAt(room: { state: MatchState }, pieceId: string, index: number) {
+  const piece = room.state.pieces.find((p) => p.id === pieceId)!;
+  piece.positionKind = "outer";
+  piece.positionIndex = index;
+  piece.previousPositionKind = "outer";
+  piece.previousPositionIndex = index;
+}
+
+describe("MatchRoom 캐릭터 능력 통합", () => {
+  let colyseus: ColyseusTestServer;
+
+  beforeAll(async () => {
+    colyseus = await boot(createGameServer());
+  });
+  afterAll(async () => await colyseus.shutdown());
+  afterEach(async () => await colyseus.cleanup());
+
+  // turnOrder = [teamA[0], teamB[0], teamA[1], teamB[1]] (buildTurnOrder, turns.ts)에서
+  // teamA[0]/teamA[1]가 clients[0]/clients[1] 중 어느 쪽인지는 join 처리 순서에 따라 달라질 수
+  // 있다 — 팀 배정(clients[i]가 스스로 보낸 pickTeam) 자체는 결정적이지만, 같은 팀 내 두 명 중
+  // 누가 "0번"이 되는지는 아니다. 그래서 아래 테스트들은 절대 clients[0]을 무브해로 가정하지
+  // 않는다: (1) 이동시켜야 하는 캐릭터(교주 등)가 필요한 경우 같은 팀의 두 클라이언트에게
+  // 항상 동일한 캐릭터 조합을 주고, (2) 실제로 첫 턴을 받은 세션을
+  // `room.state.turnOrder[room.state.currentTurnIndex]`로 조회해서 사용한다. 팀 자체(A/B)는
+  // 각 클라이언트가 스스로 선언하므로 clients[2]/clients[3]가 항상 팀B라는 점은 안전하게 쓸 수
+  // 있다.
+
+  it("교주가 업힌 상태로 이동해 능력이 성공하면 1칸 더 전진한다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"], // 팀A 두 명 모두 동일 — 누가 첫 턴이든 교주가 움직인다
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 }, // 모든 확률 판정 성공
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    placeAt(room, `${sessionId}-0`, 3);
+    placeAt(room, `${sessionId}-1`, 3);
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
+    const ally = room.state.pieces.find((p) => p.id === `${sessionId}-1`)!;
+    expect(mover.positionIndex).toBe(9); // 3 + 5(모) + 1(보너스)
+    expect(ally.positionIndex).toBe(9);
+  });
+
+  it("교주 능력이 실패하면 보너스 전진 없이 정상 이동만 일어난다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0.99 }, // 모든 확률 판정 실패
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    placeAt(room, `${sessionId}-0`, 3);
+    placeAt(room, `${sessionId}-1`, 3);
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
+    const ally = room.state.pieces.find((p) => p.id === `${sessionId}-1`)!;
+    expect(mover.positionIndex).toBe(8); // 3 + 5(모), 보너스 없음
+    expect(ally.positionIndex).toBe(8);
+  });
+
+  it("상대 마담이 도착 칸과 같은 줄에 있으면 교주 능력이 저지된다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 }, // 저지가 없다면 반드시 성공할 값
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const enemyMadamId = `${clients[2].sessionId}-0`; // clients[2]는 항상 팀B(스스로 선언한 팀)
+    placeAt(room, `${sessionId}-0`, 3);
+    placeAt(room, `${sessionId}-1`, 3);
+    placeAt(room, enemyMadamId, 7); // 도착 칸(8)과 같은 줄(B: 6~10)
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
+    expect(mover.positionIndex).toBe(8); // 저지되어 보너스 없음
+  });
+
+  it("같은 줄의 의사가 잡힘을 무효화하면 잡힌 말이 원위치에 남는다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"], // 팀A — 이동할 말의 캐릭터는 이 능력과 무관, 유효한 조합이면 된다
+        ["성직", "의사"],
+        ["의사", "성직"], // 팀B — 의사가 잡힌 말을 지킨다
+        ["의사", "성직"],
+      ],
+      { rng: () => 0 }, // 마담이 없으므로 저지 없이 항상 의사가 성공
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`; // clients[3]는 항상 팀B
+    const uisaId = `${clients[2].sessionId}-0`; // clients[2]는 항상 팀B, 캐릭터 "의사"
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8); // 3 + 5(모)와 동일한 도착 칸
+    placeAt(room, uisaId, 7); // victim과 같은 줄(B)
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId });
+    await flush();
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("outer");
+    expect(victim.positionIndex).toBe(8); // 잡히지 않은 것으로 복원
+  });
+
+  it("의사가 실패하면 이어서 성직이 판정해 성공 시 성직 위치로 순간이동한다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"],
+        ["성직", "의사"],
+        ["의사", "성직"],
+        ["의사", "성직"],
+      ],
+      { rng: () => 0.37 }, // 의사(0.35 미만) 실패, 성직(0.4 미만) 성공 — 마담 없음
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`;
+    const uisaId = `${clients[2].sessionId}-0`;
+    const seongjikId = `${clients[2].sessionId}-1`;
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8);
+    placeAt(room, uisaId, 7); // 같은 줄(B) — 의사는 발동 시도하지만 실패
+    placeAt(room, seongjikId, 12); // 다른 줄(C)이어도 성직은 제한 없음
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId });
+    await flush();
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("outer");
+    expect(victim.positionIndex).toBe(12); // 성직 위치로 순간이동
+  });
+
+  it("의사와 성직이 모두 실패하면 정상적으로 시작점으로 돌아간다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"],
+        ["성직", "의사"],
+        ["의사", "성직"],
+        ["의사", "성직"],
+      ],
+      { rng: () => 0.99 }, // 둘 다 실패
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`;
+    const uisaId = `${clients[2].sessionId}-0`;
+    const seongjikId = `${clients[2].sessionId}-1`;
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8);
+    placeAt(room, uisaId, 7);
+    placeAt(room, seongjikId, 12);
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId });
+    await flush();
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("start"); // 정상적으로 잡힘
+  });
+});

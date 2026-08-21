@@ -1,5 +1,6 @@
 import { Room, Client } from "colyseus";
 import { applyMove, type Piece } from "../game/pieces";
+import { applyGyojuBonus, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
 import { DEFAULT_GAUGE_CYCLE_MS, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
 import { MatchState, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
@@ -21,11 +22,14 @@ export class MatchRoom extends Room<MatchState> {
   private turnToken = 0;
   private throwTimeoutMs = DEFAULT_THROW_TIMEOUT_MS;
   private moveTimeoutMs = DEFAULT_MOVE_TIMEOUT_MS;
+  /** 능력 확률 판정에 쓰는 난수 함수. 기본은 Math.random, 테스트에서 결정적 값 주입 가능. */
+  private rng: Rng = Math.random;
 
-  onCreate(options?: { throwTimeoutMs?: number; moveTimeoutMs?: number }) {
+  onCreate(options?: { throwTimeoutMs?: number; moveTimeoutMs?: number; rng?: Rng }) {
     this.setState(new MatchState());
     if (options?.throwTimeoutMs) this.throwTimeoutMs = options.throwTimeoutMs;
     if (options?.moveTimeoutMs) this.moveTimeoutMs = options.moveTimeoutMs;
+    if (options?.rng) this.rng = options.rng;
 
     this.onMessage("pickTeam", (client, message: { team: "A" | "B" } | undefined) => {
       if (this.state.phase !== "waiting") return;
@@ -205,7 +209,28 @@ export class MatchRoom extends Room<MatchState> {
 
     const pieces: Piece[] = this.toGamePieces();
 
-    const { pieces: updated } = applyMove(pieces, pieceId, YUT_STEPS[result], useShortcut);
+    const { pieces: afterMove, capturedPieceIds, piggybackedIds } = applyMove(
+      pieces,
+      pieceId,
+      YUT_STEPS[result],
+      useShortcut,
+    );
+
+    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1) — 이동한 말이 교주이고 업기가 발생했으면
+    // 80% 확률로 업힌 말 전원이 1칸 더 전진한다. 이 보너스 전진이 새로 만든 잡힘도 아래
+    // resolveCaptureResponses에 함께 넘긴다(원래 이동의 잡힘 다음 순서로).
+    const bonus = applyGyojuBonus(afterMove, pieceId, piggybackedIds, this.rng);
+
+    const mainCaptureRecords: CaptureRecord[] = capturedPieceIds.map((id) => {
+      const original = pieces.find((p) => p.id === id)!;
+      return { pieceId: id, teamId: original.teamId, originalPosition: original.position };
+    });
+    const bonusCaptureRecords: CaptureRecord[] = bonus.capturedPieceIds.map((id) => {
+      const original = afterMove.find((p) => p.id === id)!;
+      return { pieceId: id, teamId: original.teamId, originalPosition: original.position };
+    });
+
+    const updated = resolveCaptureResponses(bonus.pieces, [...mainCaptureRecords, ...bonusCaptureRecords], this.rng);
 
     for (const updatedPiece of updated) {
       const schemaPiece = this.state.pieces.find((p) => p.id === updatedPiece.id)!;
