@@ -1,0 +1,46 @@
+export type PositionKind = "start" | "outer" | "center" | "finished";
+
+export interface PlayerState {
+  sessionId: string;
+  team: "A" | "B" | "";
+  ready: boolean;
+  characters: string[];
+}
+
+export interface PieceState {
+  id: string;
+  ownerSessionId: string;
+  positionKind: PositionKind;
+  positionIndex: number;
+  previousPositionKind: PositionKind;
+  previousPositionIndex: number;
+}
+
+export interface MatchState {
+  phase: "waiting" | "playing" | "finished";
+  players: Map<string, PlayerState>;
+  pieces: PieceState[];
+  turnOrder: string[];
+  currentTurnIndex: number;
+  gaugePhase: "idle" | "charging" | "resolved";
+  throwStartAt: number;
+  lastThrowResult: string;
+  turnDeadlineAt: number;
+  winnerSessionId: string;
+}
+
+export const CHARACTERS = ["교주", "성직", "마담", "의사"] as const;
+export type CharacterId = (typeof CHARACTERS)[number];
+
+// server/src/game/gauge.ts의 YutResult와 동일한 6개 코드.
+export const YUT_RESULT_LABELS: Record<string, string> = {
+  backDo: "빽도",
+  do: "도",
+  gae: "개",
+  geol: "걸",
+  yut: "윷",
+  mo: "모",
+};
+
+// server/src/game/position.ts의 SHORTCUT_JUNCTIONS(5, 10, 15)와 동일.
+export const SHORTCUT_JUNCTION_INDICES = new Set([5, 10, 15]);
