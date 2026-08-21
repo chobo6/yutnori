@@ -5,7 +5,6 @@ import { TurnPanel } from "./components/TurnPanel";
 import { WinnerScreen } from "./components/WinnerScreen";
 import { ParticipantBar } from "./components/ParticipantBar";
 import { ChatInput } from "./components/ChatInput";
-import "./App.css";
 
 function App() {
   const { status, room } = useMatchRoom();

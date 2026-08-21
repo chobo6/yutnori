@@ -1,15 +1,23 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
+  --text: #6b5b3a;
+  --text-h: #3a2e1a;
+  --bg: #efe6d3;
+  --border: #d9cbaa;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  --accent: #9e2a2b;
+  --accent-bg: rgba(158, 42, 43, 0.1);
+  --accent-border: rgba(158, 42, 43, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+    rgba(120, 90, 40, 0.1) 0 10px 15px -3px, rgba(120, 90, 40, 0.05) 0 4px 6px -2px;
+  --dancheong-band: linear-gradient(
+    90deg,
+    #9e2a2b 0%,
+    #c9a24a 25%,
+    #1d5c4a 50%,
+    #1d3461 75%,
+    #9e2a2b 100%
+  );
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -17,9 +25,13 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.35) 0%, transparent 45%),
+    radial-gradient(circle at 75% 65%, rgba(255, 255, 255, 0.3) 0%, transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(180, 150, 100, 0.12) 0%, transparent 50%);
+  background-attachment: fixed;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -27,26 +39,6 @@
 
   @media (max-width: 1024px) {
     font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
   }
 }
 
@@ -60,6 +52,13 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+#root::before {
+  content: '';
+  display: block;
+  height: 6px;
+  background: var(--dancheong-band);
 }
 
 body {
