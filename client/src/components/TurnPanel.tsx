@@ -7,6 +7,8 @@ import {
   type PieceState,
 } from "../game/matchTypes";
 import { playerLabel } from "../game/playerLabel";
+import { GaugeBar } from "./GaugeBar";
+import { YutSticks } from "./YutSticks";
 
 /**
  * pieceId는 `${sessionId}-${i}` 형태 — 순번만 뽑아 1-based로 보여준다.
@@ -31,6 +33,8 @@ function positionDescription(piece: PieceState): string {
 
 export function TurnPanel({ room }: { room: Room<MatchState> }) {
   const [, setTick] = useState(0);
+  // 게이지 막대 애니메이션 기준 시각(로컬) — 실제 결과 판정과는 무관, 오직 GaugeBar 연출용.
+  const [chargeStartedAt, setChargeStartedAt] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => setTick((n) => n + 1), 1000);
@@ -47,6 +51,7 @@ export function TurnPanel({ room }: { room: Room<MatchState> }) {
     // 포인터를 이 버튼에 캡처해둔다 — 안 그러면 누른 채로 버튼 밖으로 손가락/마우스가
     // 벗어난 뒤 뗐을 때 onPointerUp이 아예 발생하지 않아 "누른 채로 영원히 멈춘" 상태가 될 수 있다.
     e.currentTarget.setPointerCapture(e.pointerId);
+    setChargeStartedAt(Date.now());
     room.send("throwStart", {});
   }
 
@@ -83,8 +88,12 @@ export function TurnPanel({ room }: { room: Room<MatchState> }) {
         </button>
       )}
 
+      {/* 게이지 막대는 순수 시각 힌트 — 실제 결과는 서버가 재계산한 값을 따른다. */}
+      {isMyTurn && room.state.gaugePhase === "charging" && <GaugeBar startedAt={chargeStartedAt} />}
+
       {isMyTurn && room.state.gaugePhase === "resolved" && (
         <div>
+          <YutSticks result={room.state.lastThrowResult || null} />
           <p>결과: {YUT_RESULT_LABELS[room.state.lastThrowResult] ?? room.state.lastThrowResult}</p>
           <p>이동할 말을 고르세요:</p>
           {Array.from(room.state.pieces)

@@ -1,0 +1,10 @@
+.canvasWrap {
+  width: 280px;
+  height: 200px;
+  border: 1px solid #333;
+  margin: 0.5rem 0;
+}
+
+.canvasWrap canvas {
+  display: block;
+}

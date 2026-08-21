@@ -1,0 +1,33 @@
+.track {
+  position: relative;
+  height: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #333;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+
+.zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.needle {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  background: #111;
+  transform: translateX(-50%);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
