@@ -1,4 +1,12 @@
-export type PositionKind = "start" | "outer" | "center" | "finished";
+export type PositionKind =
+  | "start"
+  | "outer"
+  | "shortcutIn5"
+  | "shortcutIn10"
+  | "shortcutIn15"
+  | "center"
+  | "shortcutOut"
+  | "finished";
 
 export interface PlayerState {
   sessionId: string;

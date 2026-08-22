@@ -28,6 +28,8 @@ function positionDescription(piece: PieceState): string {
       return "중앙";
     case "finished":
       return "완주";
+    default:
+      return "지름길 이동중";
   }
 }
 
