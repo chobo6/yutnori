@@ -30,7 +30,12 @@ function roll(chance: number, rng: Rng): boolean {
 }
 
 function onBoard(position: Position): boolean {
-  return position.kind === "outer" || position.kind === "center";
+  return (
+    position.kind === "outer" ||
+    position.kind === "center" ||
+    position.kind === "shortcutIn" ||
+    position.kind === "shortcutOut"
+  );
 }
 
 /**

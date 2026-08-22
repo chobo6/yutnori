@@ -70,6 +70,17 @@ describe("applyGyojuBonus", () => {
     expect(p1.position).toEqual({ kind: "outer", index: 8 }); // 저지되어 전진 없음
   });
 
+  it("교주가 지름길 중간칸(shortcutOut)에서 업은 채로 있어도 보너스 전진이 발동할 수 있다", () => {
+    const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
+    pieces[0].position = { kind: "shortcutOut", step: 2 };
+    pieces[1].position = { kind: "shortcutOut", step: 2 };
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const p1 = result.pieces.find((p) => p.id === "p1")!;
+    const p2 = result.pieces.find((p) => p.id === "p2")!;
+    expect(p1.position).toEqual({ kind: "finished" }); // shortcutOut 2단계에서 1칸 더 가면 완주(3+2+1=6)
+    expect(p2.position).toEqual({ kind: "finished" });
+  });
+
   it("상대 마담이 다른 줄이면 저지되지 않는다", () => {
     const pieces = [
       piece("p1", "alice", "A", "교주", 8), // 변 B
@@ -212,5 +223,14 @@ describe("resolveCaptureResponses", () => {
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 15 });
     expect(victim.previousPosition).toEqual({ kind: "outer", index: 15 }); // 도착지와 동일 — 빽도는 no-op
+  });
+
+  it("성직이 지름길 중간칸(shortcutIn)에 있어도 잡힌 아군을 구조할 수 있다", () => {
+    const pieces = [piece("victim", "bob", "B", "마담", 8), piece("seongjik", "bob", "B", "성직", 15)];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "shortcutIn", junction: 15, step: 1 };
+    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "shortcutIn", junction: 15, step: 1 }); // 성직 위치로 순간이동
   });
 });
