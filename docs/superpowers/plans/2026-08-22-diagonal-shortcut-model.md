@@ -654,6 +654,90 @@ git commit -m "클라이언트 PositionKind 타입에 지름길 중간칸 문자
 
 ---
 
+### Task 5: 능력 시스템이 지름길 중간칸도 "보드 위"로 인식하도록 수정 — `abilities.ts`
+
+> **추가된 배경(Task 1 구현 중 발견):** 이 플랜을 처음 쓸 때 "abilities.ts는 수정 불필요"라고 판단한 근거(`sideOf`가 outer 이외 모든 kind에 `null`을 반환하는 기존 동작)는 `sideOf`/`sameSide`에는 맞지만, `abilities.ts`에는 이와 별개인 `onBoard(position)` 헬퍼가 있고 이게 `position.kind === "outer" || position.kind === "center"`로만 판정하고 있었다 — 새로 생긴 `shortcutIn`/`shortcutOut` 칸에 서 있는 말을 "보드 밖"으로 잘못 취급하게 된다. `onBoard`는 마담 저지(`isBlockedByMadam`)·교주 보너스(`applyGyojuBonus`)·의사(`tryUisa`)·성직(`trySeongjik`) 판정 4곳 전부가 거치는 유일한 게이트라, 이 한 줄을 고치면 4곳 모두 올바르게 전파된다.
+
+**Files:**
+- Modify: `server/src/game/abilities.ts`
+- Test: `server/src/game/abilities.test.ts`
+
+**Interfaces:**
+- Consumes: Task 1의 확장된 `Position` 타입(`shortcutIn`/`shortcutOut`).
+- Produces: 없음(내부 헬퍼 `onBoard`의 동작만 넓어짐, 외부에 노출되는 함수 시그니처는 전혀 바뀌지 않는다).
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+`server/src/game/abilities.test.ts`의 `describe("resolveCaptureResponses", ...)` 블록 끝(마지막 `it` 뒤, 닫는 `});` 앞)에 아래 테스트를 추가한다:
+
+```ts
+  it("성직이 지름길 중간칸(shortcutIn)에 있어도 잡힌 아군을 구조할 수 있다", () => {
+    const pieces = [piece("victim", "bob", "B", "마담", 8), piece("seongjik", "bob", "B", "성직", 15)];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "shortcutIn", junction: 15, step: 1 };
+    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "shortcutIn", junction: 15, step: 1 }); // 성직 위치로 순간이동
+  });
+```
+
+(이 파일에 이미 있는 `capture(pieceId, teamId, index)` 로컬 헬퍼를 그대로 사용한다 — `describe("resolveCaptureResponses", ...)` 블록 맨 위에 정의되어 있다.)
+
+`describe("applyGyojuBonus", ...)` 블록 끝(마지막 `it` 뒤, 닫는 `});` 앞)에 아래 테스트를 추가한다:
+
+```ts
+  it("교주가 지름길 중간칸(shortcutOut)에서 업은 채로 있어도 보너스 전진이 발동할 수 있다", () => {
+    const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
+    pieces[0].position = { kind: "shortcutOut", step: 2 };
+    pieces[1].position = { kind: "shortcutOut", step: 2 };
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const p1 = result.pieces.find((p) => p.id === "p1")!;
+    const p2 = result.pieces.find((p) => p.id === "p2")!;
+    expect(p1.position).toEqual({ kind: "finished" }); // shortcutOut 2단계에서 1칸 더 가면 완주(3+2+1=6)
+    expect(p2.position).toEqual({ kind: "finished" });
+  });
+```
+
+- [ ] **Step 2: 테스트 실패 확인**
+
+Run: `npm test --workspace server -- abilities.test.ts`
+Expected: FAIL — 첫 번째 테스트는 `onBoard(성직.position)`이 `shortcutIn`에 대해 `false`를 반환해 성직이 후보에서 아예 제외되므로, victim이 구조되지 않고 `{kind:"start"}`에 그대로 남아 기대값과 불일치. 두 번째 테스트는 `onBoard(mover.position)`이 `shortcutOut`에 대해 `false`를 반환해 `applyGyojuBonus`가 조기 반환(`{pieces, capturedPieceIds:[]}`)하므로 p1/p2 위치가 전혀 안 바뀌어 기대값(`finished`)과 불일치.
+
+- [ ] **Step 3: 구현**
+
+`server/src/game/abilities.ts`의 `onBoard` 함수를 아래로 교체한다:
+
+```ts
+function onBoard(position: Position): boolean {
+  return (
+    position.kind === "outer" ||
+    position.kind === "center" ||
+    position.kind === "shortcutIn" ||
+    position.kind === "shortcutOut"
+  );
+}
+```
+
+- [ ] **Step 4: 테스트 통과 확인**
+
+Run: `npm test --workspace server -- abilities.test.ts`
+Expected: PASS (전체 통과)
+
+Run: `npm test --workspace server`
+Expected: 서버 전체 테스트 스위트 통과(회귀 없음)
+
+Run: `npm run build --workspace server`
+Expected: 타입 에러 없음
+
+- [ ] **Step 5: 커밋**
+
+```bash
+git add server/src/game/abilities.ts server/src/game/abilities.test.ts
+git commit -m "능력 판정의 onBoard가 지름길 중간칸도 보드 위로 인식하도록 수정"
+```
+
+---
+
 ## Self-Review 결과
 
 - **스펙 커버리지:** §1(실제 윷판 구조)과 §2(중앙 통과 후 자동 진행, 접근법 A 채택)는 Task 1의 데이터 모델/이동 로직에 반영. §3(데이터 모델)은 Task 1. §4(이동 로직, 6칸 절대값 트랙)는 Task 1. §5(업기/잡기)는 Task 2. §6(서버 상태 인코딩)은 Task 3. §7(영향받지 않는 부분 — abilities.ts, moveBackward, TurnPanel.tsx 체크박스 조건, MatchRoom.ts, 클라이언트 시각화)은 각 태스크에서 손대지 않음으로써 그대로 지켜짐, Task 4에서 명시적으로 "시각화는 범위 밖"임을 재확인. §8(테스트 전략)은 세 태스크 모두 TDD로 반영. §9(범위 제외)는 어떤 태스크에도 포함하지 않아 자연히 지켜짐. 누락 없음.
