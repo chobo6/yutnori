@@ -23,6 +23,8 @@ export interface MoveResult {
 export function samePosition(a: Position, b: Position): boolean {
   if (a.kind === "outer" && b.kind === "outer") return a.index === b.index;
   if (a.kind === "center" && b.kind === "center") return true;
+  if (a.kind === "shortcutIn" && b.kind === "shortcutIn") return a.junction === b.junction && a.step === b.step;
+  if (a.kind === "shortcutOut" && b.kind === "shortcutOut") return a.step === b.step;
   return false;
 }
 

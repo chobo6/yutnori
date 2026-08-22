@@ -140,4 +140,79 @@ describe("applyMove", () => {
     const { piggybackedIds } = applyMove(pieces, "p1", 2, false);
     expect(piggybackedIds).toEqual([]);
   });
+
+  it("지름길 중간칸(shortcutIn)에서도 같은 모서리+같은 단계면 업기가 성립한다", () => {
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "shortcutIn", junction: 5, step: 1 },
+        previousPosition: { kind: "outer", index: 5 },
+      },
+      {
+        id: "p2",
+        ownerId: "alice",
+        teamId: "A",
+        character: "성직",
+        position: { kind: "shortcutIn", junction: 5, step: 1 },
+        previousPosition: { kind: "outer", index: 5 },
+      },
+    ];
+    const { pieces: result } = applyMove(pieces, "p1", 1, false);
+    const p1 = result.find((p) => p.id === "p1")!;
+    const p2 = result.find((p) => p.id === "p2")!;
+    expect(p1.position).toEqual({ kind: "shortcutIn", junction: 5, step: 2 });
+    expect(p2.position).toEqual({ kind: "shortcutIn", junction: 5, step: 2 }); // 같이 이동
+  });
+
+  it("같은 단계라도 지름길 진입 모서리가 다르면 다른 칸으로 취급해 업기가 안 된다", () => {
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "shortcutIn", junction: 5, step: 1 },
+        previousPosition: { kind: "outer", index: 5 },
+      },
+      {
+        id: "p2",
+        ownerId: "alice",
+        teamId: "A",
+        character: "성직",
+        position: { kind: "shortcutIn", junction: 10, step: 1 },
+        previousPosition: { kind: "outer", index: 10 },
+      },
+    ];
+    const { pieces: result } = applyMove(pieces, "p1", 1, false);
+    const p2 = result.find((p) => p.id === "p2")!;
+    expect(p2.position).toEqual({ kind: "shortcutIn", junction: 10, step: 1 }); // 그대로, 업기 안 됨
+  });
+
+  it("지름길 중간칸에서 상대 팀 말을 잡을 수 있다", () => {
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "outer", index: 5 },
+        previousPosition: { kind: "start" },
+      },
+      {
+        id: "enemy1",
+        ownerId: "bob",
+        teamId: "B",
+        character: "마담",
+        position: { kind: "shortcutIn", junction: 5, step: 1 },
+        previousPosition: { kind: "outer", index: 5 },
+      },
+    ];
+    const { pieces: result, capturedPieceIds } = applyMove(pieces, "p1", 1, true);
+    const enemy = result.find((p) => p.id === "enemy1")!;
+    expect(enemy.position).toEqual({ kind: "start" });
+    expect(capturedPieceIds).toEqual(["enemy1"]);
+  });
 });
