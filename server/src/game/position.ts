@@ -8,15 +8,6 @@ export type Position =
 
 export const SHORTCUT_JUNCTIONS: ReadonlySet<number> = new Set([5, 10, 15]);
 
-/**
- * 지금 서 있는 자리에서 지름길(모서리 진입) 선택지가 있는지 — 모서리에서만 선택 가능하고,
- * 일단 지름길에 올라탄 뒤(shortcutIn/center/shortcutOut)에는 항상 자동으로 도착 방향으로만
- * 진행하므로 선택지가 없다.
- */
-export function isAtShortcutJunction(pos: Position): boolean {
-  return pos.kind === "outer" && SHORTCUT_JUNCTIONS.has(pos.index);
-}
-
 const LAST_OUTER_INDEX = 19;
 
 /**
@@ -25,6 +16,9 @@ const LAST_OUTER_INDEX = 19;
  * absoluteStep이 1이나 2일 때만 junction이 필요하다(그 외에는 사용하지 않음).
  */
 function shortcutPositionFromAbsolute(junction: 5 | 10 | 15 | null, absoluteStep: number): Position {
+  if (absoluteStep < 1) {
+    throw new Error("지름길 절대값은 1 이상이어야 합니다");
+  }
   if (absoluteStep <= 2) {
     if (junction === null) {
       throw new Error("지름길 진입 단계 계산에 junction이 필요합니다");

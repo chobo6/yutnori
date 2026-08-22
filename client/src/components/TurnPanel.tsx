@@ -24,12 +24,18 @@ function positionDescription(piece: PieceState): string {
       return "대기중";
     case "outer":
       return `${piece.positionIndex}번 칸`;
+    case "shortcutIn5":
+      return `5번 지름길 ${piece.positionIndex}칸`;
+    case "shortcutIn10":
+      return `10번 지름길 ${piece.positionIndex}칸`;
+    case "shortcutIn15":
+      return `15번 지름길 ${piece.positionIndex}칸`;
     case "center":
       return "중앙";
+    case "shortcutOut":
+      return `중앙 통과 ${piece.positionIndex}칸`;
     case "finished":
       return "완주";
-    default:
-      return "지름길 이동중";
   }
 }
 
@@ -101,9 +107,7 @@ export function TurnPanel({ room }: { room: Room<MatchState> }) {
           {Array.from(room.state.pieces)
             .filter((p) => p.ownerSessionId === room.sessionId && p.positionKind !== "finished")
             .map((p) => {
-              const atJunction =
-                p.positionKind === "center" ||
-                (p.positionKind === "outer" && SHORTCUT_JUNCTION_INDICES.has(p.positionIndex));
+              const atJunction = p.positionKind === "outer" && SHORTCUT_JUNCTION_INDICES.has(p.positionIndex);
               return <PieceMoveButton key={p.id} piece={p} atJunction={atJunction} onMove={moveMyPiece} />;
             })}
         </div>

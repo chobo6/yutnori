@@ -233,4 +233,13 @@ describe("resolveCaptureResponses", () => {
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "shortcutIn", junction: 15, step: 1 }); // 성직 위치로 순간이동
   });
+
+  it("의사가 지름길 칸(shortcutIn)에 있으면 '같은 줄'이 성립하지 않아 잡힌 아군을 구조할 수 없다(의도된 동작 — center도 이미 마찬가지)", () => {
+    const pieces = [piece("victim", "bob", "B", "마담", 8), piece("uisa", "bob", "B", "의사", 7)];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "shortcutIn", junction: 5, step: 1 };
+    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "start" });
+  });
 });
