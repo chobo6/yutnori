@@ -13,7 +13,8 @@ export class PieceSchema extends Schema {
   @type("string") ownerSessionId: string = "";
   /** 이 말에 고정 배정된 캐릭터("교주"|"성직"|"마담"|"의사") — 능력 판정은 abilities.ts 참고. */
   @type("string") character: string = "";
-  @type("string") positionKind: string = "start"; // "start" | "outer" | "center" | "finished"
+  // "start" | "outer" | "shortcutIn5" | "shortcutIn10" | "shortcutIn15" | "center" | "shortcutOut" | "finished"
+  @type("string") positionKind: string = "start";
   @type("number") positionIndex: number = -1;
   @type("string") previousPositionKind: string = "start";
   @type("number") previousPositionIndex: number = -1;
@@ -39,12 +40,25 @@ export function toSchemaPosition(pos: Position): { kind: string; index: number }
   if (pos.kind === "outer") {
     return { kind: "outer", index: pos.index };
   }
+  if (pos.kind === "shortcutIn") {
+    return { kind: `shortcutIn${pos.junction}`, index: pos.step };
+  }
+  if (pos.kind === "shortcutOut") {
+    return { kind: "shortcutOut", index: pos.step };
+  }
   return { kind: pos.kind, index: -1 };
 }
 
 export function fromSchemaPosition(kind: string, index: number): Position {
   if (kind === "outer") {
     return { kind: "outer", index };
+  }
+  if (kind === "shortcutIn5" || kind === "shortcutIn10" || kind === "shortcutIn15") {
+    const junction = Number(kind.slice("shortcutIn".length)) as 5 | 10 | 15;
+    return { kind: "shortcutIn", junction, step: index as 1 | 2 };
+  }
+  if (kind === "shortcutOut") {
+    return { kind: "shortcutOut", step: index as 1 | 2 };
   }
   return { kind: kind as "start" | "center" | "finished" };
 }

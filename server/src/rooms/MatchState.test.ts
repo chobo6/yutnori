@@ -33,4 +33,24 @@ describe("Position <-> Schema 변환", () => {
       expect(fromSchemaPosition(schema.kind, schema.index)).toEqual({ kind });
     }
   });
+
+  it("shortcutIn은 진입 모서리별로 다른 kind 문자열로 저장되고 왕복 변환된다", () => {
+    for (const junction of [5, 10, 15] as const) {
+      for (const step of [1, 2] as const) {
+        const position = { kind: "shortcutIn" as const, junction, step };
+        const schema = toSchemaPosition(position);
+        expect(schema).toEqual({ kind: `shortcutIn${junction}`, index: step });
+        expect(fromSchemaPosition(schema.kind, schema.index)).toEqual(position);
+      }
+    }
+  });
+
+  it("shortcutOut은 왕복 변환된다", () => {
+    for (const step of [1, 2] as const) {
+      const position = { kind: "shortcutOut" as const, step };
+      const schema = toSchemaPosition(position);
+      expect(schema).toEqual({ kind: "shortcutOut", index: step });
+      expect(fromSchemaPosition(schema.kind, schema.index)).toEqual(position);
+    }
+  });
 });
