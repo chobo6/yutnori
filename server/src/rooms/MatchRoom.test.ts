@@ -50,12 +50,9 @@ describe("MatchRoom", () => {
   });
 
   it("1v1 모드에서는 2명(팀당 1명)이 캐릭터 4종씩 고르고 준비하면 게임이 시작되고 말이 8개(4개씩) 생긴다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
     const clientA = await colyseus.connectTo(room);
     const clientB = await colyseus.connectTo(room);
-
-    clientA.send("pickMode", { mode: "1v1" });
-    await flush();
 
     clientA.send("pickTeam", { team: "A" });
     clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
@@ -74,33 +71,10 @@ describe("MatchRoom", () => {
     expect(room.state.pieces.filter((p) => p.ownerSessionId === clientB.sessionId).length).toBe(4);
   });
 
-  it("1v1 모드에서 한 팀에 2명이 들어와 인원이 안 맞으면 게임이 시작되지 않는다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
-    const clients = await Promise.all([colyseus.connectTo(room), colyseus.connectTo(room), colyseus.connectTo(room)]);
-
-    clients[0].send("pickMode", { mode: "1v1" });
-    await flush();
-
-    clients[0].send("pickTeam", { team: "A" });
-    clients[0].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
-    clients[1].send("pickTeam", { team: "A" });
-    clients[1].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
-    clients[2].send("pickTeam", { team: "B" });
-    clients[2].send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
-    await flush();
-    for (const c of clients) c.send("ready", {});
-    await flush();
-
-    expect(room.state.phase).toBe("waiting");
-  });
-
   it("1v1 모드에서 두 명 다 같은 팀을 고르면(팀 분배가 안 맞으면) 게임이 시작되지 않는다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
     const clientA = await colyseus.connectTo(room);
     const clientB = await colyseus.connectTo(room);
-
-    clientA.send("pickMode", { mode: "1v1" });
-    await flush();
 
     clientA.send("pickTeam", { team: "A" });
     clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
@@ -116,12 +90,9 @@ describe("MatchRoom", () => {
   });
 
   it("ready 이후 마지막 조건(pickCharacters)이 채워지면 추가 ready 없이도 게임이 시작된다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
     const clientA = await colyseus.connectTo(room);
     const clientB = await colyseus.connectTo(room);
-
-    clientA.send("pickMode", { mode: "1v1" });
-    await flush();
 
     clientA.send("pickTeam", { team: "A" });
     clientB.send("pickTeam", { team: "B" });
@@ -303,31 +274,10 @@ describe("MatchRoom", () => {
     expect(room.state.players.get(client.sessionId)!.team).toBe("A");
   });
 
-  it("pickMode로 모드를 바꿀 수 있다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
-
-    expect(room.state.mode).toBe("2v2");
-    client.send("pickMode", { mode: "1v1" });
-    await flush();
-    expect(room.state.mode).toBe("1v1");
-  });
-
-  it("잘못된 mode 값은 무시된다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
-
-    client.send("pickMode", { mode: "3v3" });
-    await flush();
-    expect(room.state.mode).toBe("2v2");
-  });
-
   it("1v1 모드에서는 캐릭터 4종을 골라야 반영된다(2종은 무시)", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
     const client = await colyseus.connectTo(room);
 
-    client.send("pickMode", { mode: "1v1" });
-    await flush();
     client.send("pickCharacters", { characters: ["교주", "성직"] });
     await flush();
     expect(room.state.players.get(client.sessionId)!.characters.length).toBe(0);
@@ -343,11 +293,9 @@ describe("MatchRoom", () => {
   });
 
   it("1v1 모드에서는 캐릭터 중복이 허용된다", async () => {
-    const room = await colyseus.createRoom<MatchState>("match", {});
+    const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
     const client = await colyseus.connectTo(room);
 
-    client.send("pickMode", { mode: "1v1" });
-    await flush();
     client.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
     await flush();
     expect(Array.from(room.state.players.get(client.sessionId)!.characters)).toEqual([
@@ -365,6 +313,40 @@ describe("MatchRoom", () => {
     client.send("pickCharacters", { characters: ["교주", "교주"] });
     await flush();
     expect(room.state.players.get(client.sessionId)!.characters.length).toBe(0);
+  });
+
+  it("mode에 따라 maxClients가 정해진다", async () => {
+    const room2v2 = await colyseus.createRoom<MatchState>("match", {});
+    expect(room2v2.maxClients).toBe(4);
+
+    const room1v1 = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
+    expect(room1v1.maxClients).toBe(2);
+  });
+
+  it("방 생성 시 title이 메타데이터로 저장된다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", { title: "  즐거운 한판  ", mode: "1v1" });
+    expect(room.metadata?.title).toBe("즐거운 한판");
+    expect(room.metadata?.mode).toBe("1v1");
+  });
+
+  it("title을 안 주면 기본 제목이 붙는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    expect(room.metadata?.title).toBe("이름 없는 방");
+  });
+
+  it("입장 시 넘긴 nickname이 정제되어 저장되고, 없으면 기본값이 붙는다", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const withNickname = await colyseus.connectTo(room, { nickname: "  둘리  " });
+    const withoutNickname = await colyseus.connectTo(room, {});
+    await flush();
+
+    expect(room.state.players.get(withNickname.sessionId)!.nickname).toBe("둘리");
+    expect(room.state.players.get(withoutNickname.sessionId)!.nickname).toBe("플레이어");
+  });
+
+  it("게임이 시작되면 방이 잠긴다", async () => {
+    const { room } = await setupFourPlayers(colyseus);
+    expect(room.locked).toBe(true);
   });
 
   it("핸들러 안에서 예외가 나도 onUncaughtException이 막아 방이 살아남는다", async () => {

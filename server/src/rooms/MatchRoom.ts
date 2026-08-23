@@ -3,6 +3,8 @@ import { applyMove, type Piece } from "../game/pieces";
 import { applyGyojuBonus, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
 import { DEFAULT_GAUGE_CYCLE_MS, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
+import { sanitizeNickname } from "../game/nickname";
+import { sanitizeRoomTitle } from "../game/roomTitle";
 import { MatchState, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
@@ -11,7 +13,6 @@ const DEFAULT_MOVE_TIMEOUT_MS = 5000;
 const MAX_CHAT_LENGTH = 200;
 
 export class MatchRoom extends Room<MatchState> {
-  maxClients = 4;
   private pendingThrows = new Map<string, YutResult>();
   /**
    * 현재 활성 타이머(던지기 또는 말 선택)를 구분하는 토큰. 새 타이머를 걸 때마다 증가시키고,
@@ -25,8 +26,24 @@ export class MatchRoom extends Room<MatchState> {
   /** 능력 확률 판정에 쓰는 난수 함수. 기본은 Math.random, 테스트에서 결정적 값 주입 가능. */
   private rng: Rng = Math.random;
 
-  onCreate(options?: { throwTimeoutMs?: number; moveTimeoutMs?: number; rng?: Rng }) {
+  async onCreate(options?: {
+    title?: string;
+    mode?: "2v2" | "1v1";
+    throwTimeoutMs?: number;
+    moveTimeoutMs?: number;
+    rng?: Rng;
+  }) {
     this.setState(new MatchState());
+
+    const mode = options?.mode === "1v1" ? "1v1" : "2v2";
+    this.state.mode = mode;
+    this.maxClients = mode === "1v1" ? 2 : 4;
+
+    const title = sanitizeRoomTitle(options?.title) || "이름 없는 방";
+    // matchMaker가 onCreate의 반환(Promise)을 기다려주므로, 방 생성 직후 바로
+    // getAvailableRooms()/테스트에서 메타데이터를 조회해도 항상 최신 값이 보이도록 await한다.
+    await this.setMetadata({ title, mode });
+
     if (typeof options?.throwTimeoutMs === "number") this.throwTimeoutMs = options.throwTimeoutMs;
     if (typeof options?.moveTimeoutMs === "number") this.moveTimeoutMs = options.moveTimeoutMs;
     if (typeof options?.rng === "function") this.rng = options.rng;
@@ -36,13 +53,6 @@ export class MatchRoom extends Room<MatchState> {
       if (message?.team !== "A" && message?.team !== "B") return;
       const player = this.state.players.get(client.sessionId);
       if (player) player.team = message.team;
-      this.maybeStartGame();
-    });
-
-    this.onMessage("pickMode", (client, message: { mode: "2v2" | "1v1" } | undefined) => {
-      if (this.state.phase !== "waiting") return;
-      if (message?.mode !== "2v2" && message?.mode !== "1v1") return;
-      this.state.mode = message.mode;
       this.maybeStartGame();
     });
 
@@ -95,9 +105,10 @@ export class MatchRoom extends Room<MatchState> {
     });
   }
 
-  onJoin(client: Client) {
+  onJoin(client: Client, options?: { nickname?: string }) {
     const player = new PlayerState();
     player.sessionId = client.sessionId;
+    player.nickname = sanitizeNickname(options?.nickname) || "플레이어";
     this.state.players.set(client.sessionId, player);
   }
 
@@ -165,6 +176,7 @@ export class MatchRoom extends Room<MatchState> {
     }
 
     this.state.phase = "playing";
+    this.lock(); // maxClients 자동 잠금은 플레이어 이탈 시 풀리므로 명시적으로 잠가야 한다
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 

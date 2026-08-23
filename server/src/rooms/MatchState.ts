@@ -3,6 +3,7 @@ import type { Position } from "../game/position";
 
 export class PlayerState extends Schema {
   @type("string") sessionId: string = "";
+  @type("string") nickname: string = "";
   @type("string") team: string = ""; // "A" | "B" | ""
   @type("boolean") ready: boolean = false;
   @type(["string"]) characters = new ArraySchema<string>();

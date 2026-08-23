@@ -46,7 +46,7 @@ describe("sanitizeNickname", () => {
   });
 
   it("12자를 넘으면 잘라낸다", () => {
-    expect(sanitizeNickname("가나다라마바사아자차카타파하")).toBe("가나다라마바사아자차");
+    expect(sanitizeNickname("가나다라마바사아자차카타파하")).toBe("가나다라마바사아자차카타");
   });
 
   it("문자열이 아니면 빈 문자열을 반환한다", () => {
@@ -283,7 +283,7 @@ onJoin(client: Client, options?: { nickname?: string }) {
   });
 ```
 
-나머지 6곳은 "1v1 모드로 전환하려고 `pickMode`를 보내던" 설정 단계다 — `createRoom("match", {})` + `send("pickMode", {mode:"1v1"})` 두 줄을 `createRoom("match", { mode: "1v1" })` 한 줄로 바꾸고 `pickMode` 전송/flush 줄은 삭제한다. 아래 6개를 정확히 이렇게 바꾼다(각각 함수 시작 부분의 `const room = ...`/`const roomOrClientA = ...` 줄과, 그 아래 `pickMode` 전송+`await flush()` 두 줄이 대상):
+나머지 6곳 중 5곳은 "1v1 모드로 전환하려고 `pickMode`를 보내던" 설정 단계다 — `createRoom("match", {})` + `send("pickMode", {mode:"1v1"})` 두 줄을 `createRoom("match", { mode: "1v1" })` 한 줄로 바꾸고 `pickMode` 전송/flush 줄은 삭제한다(나머지 1곳은 항목 2에서 보듯 삭제 대상). 아래 항목들을 정확히 이렇게 바꾼다(각각 함수 시작 부분의 `const room = ...`/`const roomOrClientA = ...` 줄과, 그 아래 `pickMode` 전송+`await flush()` 두 줄이 대상):
 
 1. `"1v1 모드에서는 2명(팀당 1명)이 캐릭터 4종씩 고르고 준비하면..."` 테스트:
 ```ts
@@ -306,7 +306,7 @@ onJoin(client: Client, options?: { nickname?: string }) {
     clientA.send("pickTeam", { team: "A" });
 ```
 
-2. `"1v1 모드에서 한 팀에 2명이 들어와 인원이 안 맞으면..."` 테스트: 같은 패턴 — `createRoom("match", {})`를 `createRoom("match", { mode: "1v1" })`로, `clients[0].send("pickMode", { mode: "1v1" }); await flush();` 두 줄 삭제.
+2. `"1v1 모드에서 한 팀에 2명이 들어와 인원이 안 맞으면..."` 테스트: **삭제한다.** 이 테스트는 클라이언트 3명을 연결해 그중 팀 분배를 어긋나게 만드는데, 이제 1v1 방은 생성 시점에 `maxClients=2`로 고정되므로 3번째 클라이언트의 `connectTo` 자체가 매치메이커에 의해 "room is locked"로 거부된다(실행해보면 실제로 이 에러로 실패한다) — 테스트가 검증하려던 것(인원 불일치 시 시작 안 함)보다 더 근본적인 방식으로 애초에 3명이 들어올 수 없게 되어 테스트 자체가 성립하지 않는다. 바로 다음 테스트("1v1 모드에서 두 명 다 같은 팀을 고르면...")가 정확히 2명으로 팀 불일치를 만드는 동일한 취지의 검증을 이미 하고 있으므로 대체할 필요도 없다.
 
 3. `"1v1 모드에서 두 명 다 같은 팀을 고르면..."` 테스트: 같은 패턴 — `createRoom("match", {})`를 `createRoom("match", { mode: "1v1" })`로, `clientA.send("pickMode", { mode: "1v1" }); await flush();` 두 줄 삭제.
 
