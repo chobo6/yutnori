@@ -1,0 +1,17 @@
+/* client/src/components/PieceToken.module.css */
+.token {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.board {
+  width: 42px;
+  height: 56px;
+}
+
+.corner {
+  width: 30px;
+  height: 40px;
+}
