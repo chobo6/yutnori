@@ -1,0 +1,19 @@
+/* client/src/components/PlayerCorner.module.css */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 90px;
+}
+
+.nickname {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: var(--text, #3a2e1a);
+}
+
+.pieceRow {
+  display: flex;
+  gap: 2px;
+}
