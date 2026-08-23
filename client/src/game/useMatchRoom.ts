@@ -1,55 +1,27 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer } from "react";
 import type { Room } from "colyseus.js";
-import { joinMatch } from "../colyseus";
 import type { MatchState } from "./matchTypes";
 
-export type ConnectionStatus = "connecting" | "connected" | "error";
-
-export function useMatchRoom() {
-  const [room, setRoom] = useState<Room<MatchState> | null>(null);
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+/**
+ * 이미 연결된 Room을 받아 상태 변경마다 컴포넌트를 리렌더시키는 훅.
+ * "방을 얻는 것"(로비/방 만들기, App.tsx가 담당)과 "얻은 방을 구독하는 것"(이 훅)의
+ * 책임을 분리했다 — 예전에는 이 훅이 마운트 시 자동으로 joinMatch()를 호출해 방을
+ * 얻는 것까지 함께 했지만, 이제는 로비를 거쳐야 방이 생기므로 그럴 수 없다.
+ */
+export function useMatchRoom(room: Room<MatchState> | null) {
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
+    if (!room) return;
     let disposed = false;
-    let hasReceivedState = false;
-    let joinedRoom: Room<MatchState> | null = null;
-    let handleStateChange: (() => void) | null = null;
-
-    joinMatch()
-      .then((joined) => {
-        if (disposed) return;
-        joinedRoom = joined;
-        handleStateChange = () => {
-          if (disposed) return;
-          // joinOrCreate가 resolve돼도 room.state는 아직 비어있을 수 있어
-          // 첫 onStateChange를 받은 뒤에야 connected로 전환한다.
-          if (!hasReceivedState) {
-            hasReceivedState = true;
-            setRoom(joined);
-            setStatus("connected");
-          } else {
-            // 이후의 모든 상태 변경(턴 전환, 말 이동 등)마다 리렌더를 강제한다 —
-            // room 객체 참조 자체는 안 바뀌므로 setRoom만으로는 리렌더되지 않는다.
-            forceRender();
-          }
-        };
-        joined.onStateChange(handleStateChange);
-      })
-      .catch((err) => {
-        console.error("방 연결 실패", err);
-        if (!disposed) setStatus("error");
-      });
-
+    const handleStateChange = () => {
+      if (disposed) return;
+      forceRender();
+    };
+    room.onStateChange(handleStateChange);
     return () => {
       disposed = true;
-      // 언마운트 시 리스너를 해제하지 않으면 room에 콜백이 계속 붙어있게 되어
-      // 이미 사라진 훅 인스턴스를 향해 setRoom/setStatus/forceRender를 계속 호출하게 된다.
-      if (joinedRoom && handleStateChange) {
-        joinedRoom.onStateChange.remove(handleStateChange);
-      }
+      room.onStateChange.remove(handleStateChange);
     };
-  }, []);
-
-  return { room, status };
+  }, [room]);
 }

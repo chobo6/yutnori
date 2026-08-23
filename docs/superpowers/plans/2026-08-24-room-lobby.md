@@ -4,7 +4,9 @@
 
 **Goal:** `client.joinOrCreate("match")` 자동 매칭을 없애고, 닉네임 입력 → 방 목록(로비) → 방 만들기/입장 흐름으로 바꾼다.
 
-**Architecture:** 서버는 Colyseus 내장 방 목록 기능(`getAvailableRooms`)을 그대로 쓰고, 방 생성 시점에 모드(2v2/1v1)와 `maxClients`를 확정하며 게임 시작 시 명시적으로 방을 잠근다(`this.lock()`). 클라이언트는 `joinMatch()`(자동 매칭) 대신 `listRooms()`/`createRoom()`/`joinRoom()` 세 함수로 바뀌고, `useMatchRoom`은 "방을 얻는 것"과 "얻은 방을 구독하는 것"의 책임이 분리된다. 닉네임은 순수 클라이언트 값(localStorage)이며 서버는 표시에만 쓴다.
+**Architecture:** 서버는 방 생성 시점에 모드(2v2/1v1)와 `maxClients`를 확정하며 게임 시작 시 명시적으로 방을 잠근다(`this.lock()`). 클라이언트는 `joinMatch()`(자동 매칭) 대신 `listRooms()`/`createRoom()`/`joinRoom()` 세 함수로 바뀌고, `useMatchRoom`은 "방을 얻는 것"과 "얻은 방을 구독하는 것"의 책임이 분리된다. 닉네임은 순수 클라이언트 값(localStorage)이며 서버는 표시에만 쓴다.
+>
+> **Task 3 실행 중 정정(2026-08-24):** 설계 당시 "Colyseus 내장 `client.getAvailableRooms()`"를 전제했으나, 실제 설치된 `colyseus.js` 버전(0.16.22)에는 이 메서드가 존재하지 않는다(타입 정의로 직접 확인 — `create`/`join`/`joinById`/`reconnect`/`consumeSeatReservation`만 있음). songpyeon도 동일 버전대에서 같은 문제를 겪었고 이미 `matchMaker.query()` 기반 `/api/rooms` 커스텀 엔드포인트로 해결해뒀다(`songpyeon/server/src/createServer.ts`, 주석: "colyseus.js 0.16.x has no client.getAvailableRooms() — this app-level route replaces it"). 이 프로젝트도 동일 패턴을 그대로 이식했다 — 아래 Global Constraints와 Task 3 Step 1의 "REST 엔드포인트를 만들지 않는다"는 문구는 이 사실 확인 이전의 잘못된 전제였다.
 
 **Tech Stack:** React 19 + TypeScript(client), Colyseus(server, `@colyseus/schema`), Vitest(server 테스트), npm workspaces.
 
@@ -14,7 +16,7 @@
 
 - **client에는 자동화 테스트 프레임워크가 없다** — client 태스크의 검증은 `cd client && npm run build`(타입체크) + 마지막 통합 태스크의 실제 브라우저 확인으로 한다.
 - **server 로직은 TDD로**(기존 관례) — `server/src/game/*`의 순수 함수는 테스트 먼저 작성.
-- **방 목록은 Colyseus 내장 `client.getAvailableRooms()`를 쓴다** — 별도 REST 엔드포인트(`/api/rooms` 등)를 만들지 않는다.
+- **방 목록은 `matchMaker.query()` 기반 `/api/rooms` 엔드포인트로 제공한다**(당초 "Colyseus 내장 `client.getAvailableRooms()`"를 쓰려 했으나 설치된 `colyseus.js` 0.16.22에는 해당 메서드가 없음이 Task 3 실행 중 확인됨 — 위 Architecture 절의 정정 참고, songpyeon과 동일 패턴).
 - **닉네임 정제 최대 길이 12자**, **방 제목 정제 최대 길이 20자**(songpyeon의 `roomTitle.ts`와 동일 길이) — 둘 다 `input.trim().slice(0, MAX)`, 빈 문자열이면 호출부가 폴백을 채운다.
 - **게임 시작 시(`maybeStartGame`이 `phase`를 `"playing"`으로 바꾸는 지점) 반드시 `this.lock()`을 호출한다** — Colyseus의 `maxClients` 기반 자동 잠금은 클라이언트가 나가면 자동으로 풀리므로, 명시적으로 잠그지 않으면 진행 중인 방이 로비 목록에 다시 나타난다.
 - **`pickMode` 메시지는 완전히 삭제한다** — 모드는 방 생성 시(`onCreate` options)에만 정해진다. 기존 `MatchRoom.test.ts`의 `pickMode` 관련 테스트는 Task 2에서 정리한다.
@@ -379,6 +381,7 @@ git commit -m "방 생성 시 모드 확정, 닉네임 저장, 게임 시작 시
 **Files:**
 - Modify: `client/src/colyseus.ts`
 - Modify: `client/src/game/useMatchRoom.ts`
+- Modify: `server/src/createServer.ts`(실행 중 추가 — 위 Architecture 정정 참고: `matchMaker.query()` 기반 `/api/rooms` 라우트)
 
 **Interfaces:**
 - Consumes: `MatchState`(`./game/matchTypes`, 기존).
@@ -386,19 +389,26 @@ git commit -m "방 생성 시 모드 확정, 닉네임 저장, 게임 시작 시
   - `client/src/colyseus.ts`: `export function listRooms(): Promise<RoomAvailable<{ title: string; mode: "2v2" | "1v1" }>[]>`, `export function createRoom(title: string, mode: "2v2" | "1v1", nickname: string): Promise<Room<MatchState>>`, `export function joinRoom(roomId: string, nickname: string): Promise<Room<MatchState>>`. 기존 `joinMatch()`는 삭제.
   - `client/src/game/useMatchRoom.ts`: `export function useMatchRoom(room: Room<MatchState> | null): { state: MatchState | null }` — Task 6이 이 반환값 대신 `room` 자체를 직접 prop으로 넘겨 렌더링하므로, 이 훅의 진짜 역할은 "room의 상태가 바뀔 때마다 컴포넌트를 리렌더시키는 것"이다(반환값은 실질적으로 안 쓰이고 트리거 역할).
 
-- [ ] **Step 1: `colyseus.ts` 전체 교체**
+- [ ] **Step 1: `colyseus.ts` 전체 교체 — 실행 중 정정된 버전(위 Architecture 절 참고)**
+
+`listRooms()`는 당초 계획대로 `client.getAvailableRooms()`를 쓰지 못하고, 대신 서버에 새로 추가한 `/api/rooms`(songpyeon과 동일 패턴, `matchMaker.query()` 기반)를 `fetch`한다:
 
 ```ts
 // client/src/colyseus.ts
 import { Client, type Room, type RoomAvailable } from "colyseus.js";
 import type { MatchState } from "./game/matchTypes";
 
-const client = new Client(
-  import.meta.env.VITE_COLYSEUS_URL ?? "ws://localhost:2567",
-);
+const wsUrl = import.meta.env.VITE_COLYSEUS_URL ?? "ws://localhost:2567";
+const client = new Client(wsUrl);
 
-export function listRooms(): Promise<RoomAvailable<{ title: string; mode: "2v2" | "1v1" }>[]> {
-  return client.getAvailableRooms("match");
+// colyseus.js 0.16.x에는 client.getAvailableRooms()가 없다 — 서버(createServer.ts)가
+// matchMaker.query()로 대신 제공하는 /api/rooms를 직접 fetch한다.
+const httpUrl = wsUrl.replace(/^ws/, "http");
+
+export async function listRooms(): Promise<RoomAvailable<{ title: string; mode: "2v2" | "1v1" }>[]> {
+  const res = await fetch(`${httpUrl}/api/rooms`);
+  if (!res.ok) throw new Error(`방 목록 조회 실패: ${res.status}`);
+  return res.json();
 }
 
 export function createRoom(
@@ -455,8 +465,8 @@ Expected: `App.tsx`가 아직 옛 `useMatchRoom()`(인자 없이 호출) 방식�
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add client/src/colyseus.ts client/src/game/useMatchRoom.ts
-git commit -m "방 목록/생성/입장 함수로 재작성, useMatchRoom을 상태 구독 전용으로 축소"
+git add client/src/colyseus.ts client/src/game/useMatchRoom.ts server/src/createServer.ts
+git commit -m "방 목록/생성/입장 함수로 재작성, useMatchRoom을 상태 구독 전용으로 축소, /api/rooms 엔드포인트 추가"
 ```
 
 ---

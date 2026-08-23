@@ -1,17 +1,27 @@
-import { Client, type Room } from "colyseus.js";
+import { Client, type Room, type RoomAvailable } from "colyseus.js";
 import type { MatchState } from "./game/matchTypes";
 
-const client = new Client(
-  import.meta.env.VITE_COLYSEUS_URL ?? "ws://localhost:2567",
-);
+const wsUrl = import.meta.env.VITE_COLYSEUS_URL ?? "ws://localhost:2567";
+const client = new Client(wsUrl);
 
-// React StrictMode의 effect 이중 실행 때문에 joinOrCreate가 두 번 호출되는 것을 막기 위해
-// 모듈 스코프에 join promise를 캐싱한다 (songpyeon과 동일한 패턴).
-let joinPromise: Promise<Room<MatchState>> | null = null;
+// colyseus.js 0.16.x에는 client.getAvailableRooms()가 없다 — 서버(createServer.ts)가
+// matchMaker.query()로 대신 제공하는 /api/rooms를 직접 fetch한다.
+const httpUrl = wsUrl.replace(/^ws/, "http");
 
-export function joinMatch(): Promise<Room<MatchState>> {
-  if (!joinPromise) {
-    joinPromise = client.joinOrCreate<MatchState>("match");
-  }
-  return joinPromise;
+export async function listRooms(): Promise<RoomAvailable<{ title: string; mode: "2v2" | "1v1" }>[]> {
+  const res = await fetch(`${httpUrl}/api/rooms`);
+  if (!res.ok) throw new Error(`방 목록 조회 실패: ${res.status}`);
+  return res.json();
+}
+
+export function createRoom(
+  title: string,
+  mode: "2v2" | "1v1",
+  nickname: string,
+): Promise<Room<MatchState>> {
+  return client.create<MatchState>("match", { title, mode, nickname });
+}
+
+export function joinRoom(roomId: string, nickname: string): Promise<Room<MatchState>> {
+  return client.joinById<MatchState>(roomId, { nickname });
 }
