@@ -1,54 +1,76 @@
-.wrap {
-  padding: 1rem;
+/* client/src/components/GameBoard.module.css */
+.board {
+  position: relative;
+  width: min(90vw, 480px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
 }
 
-.outerRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+.backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-.cell,
-.centerCell {
-  border: 1px solid #999;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-  padding: 0.25rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.track {
+  fill: #efe6d3;
+  stroke: #9e2a2b;
+  stroke-width: 0.6;
 }
 
-.cellLabel {
-  font-size: 0.75rem;
-  color: #555;
+.diagonal {
+  stroke: #c9a24a;
+  stroke-width: 0.4;
 }
 
-.token {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 0.1rem 0.35rem;
-  margin: 0.1rem;
-  font-size: 0.7rem;
-  color: white;
-  background: #666;
+.cellDot {
+  fill: #fffdf7;
+  stroke: #8a7550;
+  stroke-width: 0.4;
 }
 
-.teamA {
-  background: #2f6feb;
+.cornerDot {
+  fill: #e8d9a8;
+  stroke: #8a7550;
+  stroke-width: 0.5;
 }
 
-.teamB {
-  background: #d9534f;
+.centerDot {
+  fill: #9e2a2b;
 }
 
-.trays {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+.pieceLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-.tray {
-  border: 1px solid #ccc;
-  padding: 0.5rem;
+.stack {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.stackItem {
+  position: absolute;
+  top: calc(var(--i) * -6px);
+  left: calc(var(--i) * -6px);
+}
+
+.centerOverlay {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 55%;
+  text-align: center;
+  pointer-events: none;
+}
+
+.centerOverlay button {
+  pointer-events: auto;
 }

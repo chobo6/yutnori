@@ -1,85 +1,117 @@
+// client/src/components/GameBoard.tsx
+import { useState, type PointerEvent, type CSSProperties } from "react";
 import type { Room } from "colyseus.js";
-import { SHORTCUT_JUNCTION_INDICES, type MatchState, type PieceState } from "../game/matchTypes";
-import { playerLabel } from "../game/playerLabel";
+import { positionToCoords, CORNERS, CENTER, OUTER_INDICES } from "../game/boardCoords";
+import type { MatchState, PieceState } from "../game/matchTypes";
+import { PieceToken } from "./PieceToken";
+import { TurnPanel } from "./TurnPanel";
 import styles from "./GameBoard.module.css";
 
-const OUTER_INDICES = Array.from({ length: 19 }, (_, i) => i + 1);
+const JUNCTION_CORNER_INDEX: Record<number, number> = { 5: 1, 10: 2, 15: 3 };
 
-/**
- * 토큰에 보일 짧은 텍스트를 만든다.
- * playerLabel은 "A팀 나" / "A팀 nCtT" 형태라 앞 2글자만 자르면 전부 "A팀"이 되어
- * 같은 팀 말이 전부 똑같아 보인다. 팀 접두사를 떼어낸 소유자 표시 + 말 순번으로 말마다 구분되게 한다.
- * 예: "나1", "나2", "nC1", "nC2"
- */
-function tokenText(piece: PieceState, room: Room<MatchState>): string {
-  const label = playerLabel(piece.ownerSessionId, room);
-  const ownerPart = label.split(" ").pop() ?? label; // "A팀 nCtT" → "nCtT"
-  // sessionId 자체에 "-"가 들어갈 수 있으므로(예: "8KN-xxxx") 반드시 "마지막" 조각을 순번으로 쓴다.
-  const ordinal = Number(piece.id.split("-").pop() ?? 0) + 1;
-  return `${ownerPart.slice(0, 2)}${ordinal}`;
-}
-
-function PieceToken({ piece, room }: { piece: PieceState; room: Room<MatchState> }) {
-  const owner = room.state.players.get(piece.ownerSessionId);
-  const teamClass = owner?.team === "A" ? styles.teamA : owner?.team === "B" ? styles.teamB : undefined;
-  return (
-    <span className={`${styles.token} ${teamClass ?? ""}`} title={playerLabel(piece.ownerSessionId, room)}>
-      {tokenText(piece, room)}
-    </span>
-  );
+function groupKey(piece: PieceState): string {
+  return `${piece.positionKind}:${piece.positionIndex}`;
 }
 
 export function GameBoard({ room }: { room: Room<MatchState> }) {
-  const pieces = Array.from(room.state.pieces);
-  const players = Array.from(room.state.players.values());
+  const [chargeStartedAt, setChargeStartedAt] = useState(0);
 
-  const piecesAtOuter = (index: number) => pieces.filter((p) => p.positionKind === "outer" && p.positionIndex === index);
-  const piecesAtCenter = pieces.filter((p) => p.positionKind === "center");
-  const piecesInTray = (sessionId: string, kind: "start" | "finished") =>
-    pieces.filter((p) => p.ownerSessionId === sessionId && p.positionKind === kind);
+  function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (room.state.gaugePhase !== "idle") return;
+    const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    if (currentSessionId !== room.sessionId) return;
+    // 포인터를 보드 루트에 캡처해둔다 — GameBoard는 게임 내내 계속 마운트돼 있으므로
+    // (docs/TROUBLESHOOTING.md #9와 달리) gaugePhase 전환 중 이 노드 자체가 사라질 일이 없다.
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setChargeStartedAt(Date.now());
+    room.send("throwStart", {});
+  }
+
+  function handlePointerUp() {
+    room.send("throwRelease", {});
+  }
+
+  const onBoardPieces = Array.from(room.state.pieces).filter(
+    (p) => p.positionKind !== "start" && p.positionKind !== "finished"
+  );
+
+  const groups = new Map<string, PieceState[]>();
+  for (const piece of onBoardPieces) {
+    const key = groupKey(piece);
+    const list = groups.get(key);
+    if (list) {
+      list.push(piece);
+    } else {
+      groups.set(key, [piece]);
+    }
+  }
 
   return (
-    <div className={styles.wrap}>
-      <h3>보드</h3>
-      <div className={styles.outerRow}>
-        {OUTER_INDICES.map((index) => (
-          <div key={index} className={styles.cell}>
-            <span className={styles.cellLabel}>
-              {index}
-              {SHORTCUT_JUNCTION_INDICES.has(index) ? "★" : ""}
-            </span>
-            {piecesAtOuter(index).map((p) => (
-              <PieceToken key={p.id} piece={p} room={room} />
-            ))}
-          </div>
+    <div
+      className={styles.board}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
+      <svg className={styles.backdrop} viewBox="0 0 100 100">
+        <rect
+          x={CORNERS[2].x}
+          y={CORNERS[1].y}
+          width={CORNERS[1].x - CORNERS[2].x}
+          height={CORNERS[3].y - CORNERS[1].y}
+          className={styles.track}
+        />
+        {[5, 10, 15].map((junction) => {
+          const corner = CORNERS[JUNCTION_CORNER_INDEX[junction]];
+          return (
+            <line
+              key={junction}
+              x1={corner.x}
+              y1={corner.y}
+              x2={CENTER.x}
+              y2={CENTER.y}
+              className={styles.diagonal}
+            />
+          );
+        })}
+        <line x1={CENTER.x} y1={CENTER.y} x2={CORNERS[0].x} y2={CORNERS[0].y} className={styles.diagonal} />
+        {OUTER_INDICES.map((index) => {
+          const c = positionToCoords("outer", index);
+          if (!c) return null;
+          return <circle key={index} cx={c.x} cy={c.y} r={3} className={styles.cellDot} />;
+        })}
+        {CORNERS.map((c, i) => (
+          <circle key={i} cx={c.x} cy={c.y} r={4} className={styles.cornerDot} />
         ))}
+        <circle cx={CENTER.x} cy={CENTER.y} r={3.5} className={styles.centerDot} />
+      </svg>
+
+      <div className={styles.pieceLayer}>
+        {Array.from(groups.entries()).map(([key, group]) => {
+          const first = group[0];
+          const coords = positionToCoords(first.positionKind, first.positionIndex);
+          if (!coords) return null;
+          return (
+            <div key={key} className={styles.stack} style={{ left: `${coords.x}%`, top: `${coords.y}%` }}>
+              {group.map((piece, i) => {
+                const owner = room.state.players.get(piece.ownerSessionId);
+                return (
+                  <div
+                    key={piece.id}
+                    className={styles.stackItem}
+                    style={{ "--i": i } as CSSProperties}
+                  >
+                    <PieceToken character={piece.character} team={owner?.team ?? ""} size="board" />
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
 
-      <div className={styles.centerCell}>
-        <span className={styles.cellLabel}>중앙</span>
-        {piecesAtCenter.map((p) => (
-          <PieceToken key={p.id} piece={p} room={room} />
-        ))}
-      </div>
-
-      <div className={styles.trays}>
-        {players.map((player) => (
-          <div key={player.sessionId} className={styles.tray}>
-            <strong>{playerLabel(player.sessionId, room)}</strong>
-            <div>
-              대기:{" "}
-              {piecesInTray(player.sessionId, "start").map((p) => (
-                <PieceToken key={p.id} piece={p} room={room} />
-              ))}
-            </div>
-            <div>
-              완주:{" "}
-              {piecesInTray(player.sessionId, "finished").map((p) => (
-                <PieceToken key={p.id} piece={p} room={room} />
-              ))}
-            </div>
-          </div>
-        ))}
+      <div className={styles.centerOverlay}>
+        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} />
       </div>
     </div>
   );
