@@ -10,6 +10,7 @@ export type PositionKind =
 
 export interface PlayerState {
   sessionId: string;
+  nickname: string;
   team: "A" | "B" | "";
   ready: boolean;
   characters: string[];

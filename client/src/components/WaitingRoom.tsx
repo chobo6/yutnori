@@ -31,10 +31,6 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, me?.characters.length]);
 
-  function pickMode(nextMode: "2v2" | "1v1") {
-    room.send("pickMode", { mode: nextMode });
-  }
-
   function pickTeam(team: "A" | "B") {
     room.send("pickTeam", { team });
   }
@@ -86,24 +82,6 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
   return (
     <div className={styles.wrap}>
       <h2>대기실</h2>
-
-      <section>
-        <h3>모드 선택</h3>
-        <button
-          type="button"
-          className={mode === "2v2" ? styles.selected : undefined}
-          onClick={() => pickMode("2v2")}
-        >
-          2v2
-        </button>
-        <button
-          type="button"
-          className={mode === "1v1" ? styles.selected : undefined}
-          onClick={() => pickMode("1v1")}
-        >
-          1v1
-        </button>
-      </section>
 
       <section>
         <h3>팀 선택</h3>

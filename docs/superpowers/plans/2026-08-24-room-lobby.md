@@ -944,7 +944,7 @@ function App() {
 export default App;
 ```
 
-(참고: `client/src/components/PlayerCorner.tsx`/`assignCorners`를 쓰는 네 모서리 레이아웃은 `GameBoard`가 `"playing"` 단계에서 스스로 그리므로 — 지난 보드 시각화 작업에서 이미 `App.tsx`가 `GameBoard` 하나만 렌더링하도록 정리되어 있다 — 이 교체로 그 구조를 건드리지 않는다.)
+**실행 중 정정:** 위 참고 문구("`GameBoard`가 네 모서리를 스스로 그리므로 `App.tsx`는 `GameBoard` 하나만 렌더링")는 실제 `App.tsx`(2026-08-23 보드 시각화 작업 이후 상태)와 다르다 — 실제로는 `App.tsx`가 `assignCorners`로 계산한 네 모서리에 `PlayerCorner`를 직접 배치하고 `styles.playScreen`/`boardArea` 레이아웃으로 `GameBoard`를 그 안에 끼워 넣는 구조가 그대로 남아 있다. Step 5의 코드를 그대로 덮어쓰면 이 레이아웃이 통째로 사라지므로, 실제 적용본은 위 자동 매칭 관련 부분(닉네임 게이트/로비 라우팅, `WinnerScreen`의 `onLeaveLobby`)만 새로 추가하고 기존 `corners`/`PlayerCorner`/`styles.playScreen` 렌더링 블록은 원래 그대로 유지했다.
 
 - [ ] **Step 6: 타입체크**
 

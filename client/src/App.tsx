@@ -1,5 +1,11 @@
 // client/src/App.tsx
+import { useState } from "react";
+import type { Room } from "colyseus.js";
+import type { MatchState } from "./game/matchTypes";
 import { useMatchRoom } from "./game/useMatchRoom";
+import { getStoredNickname } from "./game/nickname";
+import { NicknameGate } from "./components/NicknameGate";
+import { RoomList } from "./components/RoomList";
 import { WaitingRoom } from "./components/WaitingRoom";
 import { GameBoard } from "./components/GameBoard";
 import { PlayerCorner } from "./components/PlayerCorner";
@@ -10,15 +16,25 @@ import { assignCorners } from "./game/cornerSlots";
 import styles from "./App.module.css";
 
 function App() {
-  const { status, room } = useMatchRoom();
+  const [nickname, setNickname] = useState<string | null>(() => getStoredNickname());
+  const [room, setRoom] = useState<Room<MatchState> | null>(null);
+  useMatchRoom(room);
 
-  if (status !== "connected" || !room) {
-    return (
-      <div>
-        <h1>윷놀이</h1>
-        <p>연결 상태: {status}</p>
-      </div>
-    );
+  if (!nickname) {
+    return <NicknameGate onDone={setNickname} />;
+  }
+
+  if (!room) {
+    return <RoomList nickname={nickname} onRoomJoined={setRoom} />;
+  }
+
+  // create()/joinById()는 시트 예약이 끝나면 바로 resolve되고, 초기 state 전체 동기화는
+  // 그 직후 별도 메시지(리플렉션 스키마 핸드셰이크 + 첫 패치)로 도착한다 — 그 사이 한두 틱
+  // 동안 room.state 자체 또는 그 안의 players 같은 컬렉션 필드가 아직 없을 수 있어, 이
+  // 시점에 바로 읽으면 깨진다. useMatchRoom이 다음 상태 도착 시 다시 렌더시키므로 여기서는
+  // 잠깐 대기 화면만 보여주면 된다.
+  if (!room.state?.players) {
+    return <p>입장하는 중...</p>;
   }
 
   const corners = room.state.phase === "playing" ? assignCorners(room.state) : null;
@@ -50,7 +66,9 @@ function App() {
         </div>
       )}
 
-      {room.state.phase === "finished" && <WinnerScreen room={room} />}
+      {room.state.phase === "finished" && (
+        <WinnerScreen room={room} onLeaveLobby={() => setRoom(null)} />
+      )}
 
       <ChatInput room={room} />
     </div>
