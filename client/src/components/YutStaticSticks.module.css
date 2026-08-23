@@ -1,0 +1,20 @@
+/* client/src/components/YutStaticSticks.module.css */
+.wrap {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: flex-end;
+  height: 60px;
+}
+
+.stick {
+  width: 14px;
+  height: 50px;
+  background: #f5e6c8;
+  border: 2px solid #8b5a2b;
+  border-radius: 4px;
+}
+
+.marked {
+  box-shadow: inset 0 0 0 2px #c0392b;
+}
