@@ -220,7 +220,7 @@ Task 리뷰에서: `useMatchRoom.ts`의 `useEffect` cleanup이 `disposed = true`
 증상이 "그럴듯한 기존 설명"과 맞아떨어져 보여도, 그 설명 자체를 실측으로 검증하지 않으면 잘못 짚을 수 있다. 이번엔 최종 전체 브랜치 리뷰(실제 앱을 띄워 직접 확인)가 아니었으면 그대로 넘어갈 뻔했음 — 다음부터는 타이밍 관련 버그는 코드 추론만으로 끝내지 말고 실제 홀드 시간 대 지연시간을 찍어서 확인할 것.
 
 ### 관련 파일
-- `client/src/components/TurnPanel.tsx`
+- `client/src/components/GameBoard.tsx` (2026-08-23 보드 시각화 개편으로 포인터 캡처 로직이 `TurnPanel.tsx`의 던지기 버튼에서 `GameBoard.tsx` 루트 `<div>`로 이동함 — 이 문서에 기록된 근본 원인/교훈은 그대로 유효, 위치만 옮겨졌다)
 
 ---
 

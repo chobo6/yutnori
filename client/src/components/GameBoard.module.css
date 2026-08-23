@@ -6,7 +6,7 @@
   margin: 0 auto;
   touch-action: none;
   user-select: none;
-  cursor: pointer;
+  cursor: grab;
 }
 
 .backdrop {
@@ -48,6 +48,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 2;
 }
 
 .stack {
@@ -70,6 +71,7 @@
   width: 55%;
   text-align: center;
   pointer-events: none;
+  z-index: 1;
 }
 
 .centerOverlay :is(button, input, label) {

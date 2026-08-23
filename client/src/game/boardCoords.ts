@@ -17,7 +17,7 @@ export const CENTER: Coords = { x: 50, y: 50 };
 
 export const OUTER_INDICES: number[] = Array.from({ length: 19 }, (_, i) => i + 1);
 
-const JUNCTION_CORNER: Record<5 | 10 | 15, number> = { 5: 1, 10: 2, 15: 3 };
+export const JUNCTION_CORNER: Record<5 | 10 | 15, number> = { 5: 1, 10: 2, 15: 3 };
 
 function lerp(a: Coords, b: Coords, t: number): Coords {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };

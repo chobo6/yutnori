@@ -73,7 +73,12 @@ export function TurnPanel({
       <h3>{isMyTurn ? "내 턴!" : `${playerLabel(currentSessionId, room)}님의 턴을 기다리는 중`}</h3>
       <p>남은 시간: {remainingSeconds}초</p>
 
-      {isMyTurn && room.state.gaugePhase === "idle" && <YutStaticSticks />}
+      {isMyTurn && room.state.gaugePhase === "idle" && (
+        <>
+          <YutStaticSticks />
+          <p>보드를 꾹 누르고 있다가 떼세요</p>
+        </>
+      )}
 
       {/* 게이지 막대는 순수 시각 힌트 — 실제 결과는 서버가 재계산한 값을 따른다. */}
       {isMyTurn && room.state.gaugePhase === "charging" && <GaugeBar startedAt={chargeStartedAt} />}

@@ -36,7 +36,7 @@ npm run build  # tsc -b && vite build
 - `MatchRoom`의 타이머는 songpyeon의 4초 팀 턴 타이머와 동일한 `turnToken` 증가 가드 패턴을 쓴다 — 새 타이머를 걸 때마다 토큰을 증가시키고, 콜백 실행 시 자기 토큰이 아직 최신인지 확인해 오래된 타이머를 조용히 무시한다. 별도의 타이머 취소 호출이 필요 없음.
 - **클라이언트 타입은 서버 스키마를 손으로 미러링**한다(`client/src/game/matchTypes.ts`) — client/server가 별도 워크스페이스라 공유 타입 패키지가 없음(songpyeon과 동일 관례). 서버 스키마(`server/src/rooms/MatchState.ts`) 필드를 바꾸면 이 파일도 반드시 같이 고칠 것 — 자동으로 안 맞춰짐.
 - 클라이언트 구조: `client/src/game/`(순수 타입/훅/헬퍼: `matchTypes.ts`, `useMatchRoom.ts`, `playerLabel.ts`), `client/src/components/`(화면: `WaitingRoom`, `GameBoard`, `TurnPanel`, `WinnerScreen`) + CSS Modules. `App.tsx`가 `room.state.phase`(`waiting`/`playing`/`finished`)로 화면을 라우팅.
-- **보드는 현재 기능 우선(no-polish) 상태**: `GameBoard.tsx`는 전통 윷놀이판 그림이 아니라 외곽 1~19번 칸을 나열한 단순 그리드 + 중앙 칸 + 플레이어별 대기/완주 트레이. 실제 보드 아트 + Matter.js 윷가락 애니메이션은 별도 후속 계획(아직 미작성).
+- **보드는 실제 정사각형 트랙 시각화가 구현되어 있다**(2026-08-23~): `GameBoard.tsx`는 SVG로 그린 정사각형 트랙(외곽 20칸 + 5/10/15번 대각선 지름길 + 중앙)을 표시하고, 좌표는 `client/src/game/boardCoords.ts`(`positionToCoords`, `JUNCTION_CORNER`)가 계산한다. 말은 팀 색이 입혀진 캐릭터 초상(`PieceToken`)으로 보드 위에 그려지고, 플레이어 정보는 화면 네 모서리(`PlayerCorner`, `client/src/game/cornerSlots.ts`의 `assignCorners`로 배치 결정)에 카드로 표시된다. 던지기 트리거는 더 이상 전용 버튼이 아니라 보드 전체 영역(`GameBoard.tsx` 루트 `<div>`의 `onPointerDown`/`onPointerUp`)이다. 설계 배경은 `docs/superpowers/specs/2026-08-23-board-visualization-design.md` 참고.
 - **캐릭터(교주/성직/마담/의사) 능력 효과는 구현 완료**(2026-08-21~, `server/src/game/abilities.ts`) — 상세 규칙은 `docs/superpowers/specs/2026-08-21-character-abilities-design.md` 참고. 캐릭터 선택 개수는 모드별로 다름(2v2=서로 다른 2종, 1v1=중복 허용 4종, REQUIREMENTS.md §2).
 
 ## 보드 좌표계 — 지름길 모델(2026-08-22 재설계)
@@ -53,10 +53,9 @@ npm run build  # tsc -b && vite build
 - **업기(피기백) 판정은 "도착 칸"이 아니라 "출발 칸" 기준**이다 — `pieces.ts`의 `applyMove`는 이동하는 말의 **이전(출발) 위치**에 같은 주인의 다른 말이 있었는지로 업기를 판정한다. "도착한 칸에 이미 내 말이 있으면 업힌다"는 게 아니라, "이미 업혀 있던(같은 칸에서 출발한) 말들이 함께 이동한다"는 의미다. `samePosition`은 `outer`(같은 index)/`center`/`shortcutIn`(같은 junction+step)/`shortcutOut`(같은 step)끼리만 "같은 칸"으로 치고 `start`/`finished`는 절대 그렇게 취급하지 않는다 — 이 규칙을 깨면 `docs/TROUBLESHOOTING.md` #3이 재발한다.
 - **잡기는 `teamId` 기준, 업기는 `ownerId` 기준** — 둘을 섞으면 안 된다. `Piece.teamId`는 `MatchRoom`이 매 이동마다 `players.get(ownerSessionId).team`을 조회해서 채우는 파생값이라, 연결이 끊긴 플레이어의 말은 팀 정보가 `""`로 빠질 수 있다(알려진 한계, 아래 참고).
 - **클라이언트에서 상태가 바뀌는 UI(턴 전환, 게이지 phase 등)를 건드릴 때는 리렌더 트리거를 확인할 것** — `useMatchRoom.ts`는 `room.onStateChange`(영구 리스너) + `forceRender()` 패턴을 쓴다. `.once()`로 되돌리면 즉시 회귀. (`docs/TROUBLESHOOTING.md` #7)
-- **`gaugePhase`에 따라 다른 JSX 엘리먼트를 조건부 렌더링하는 패턴을 던지기 버튼에 다시 쓰지 말 것** — `idle`/`charging` 상태를 서로 다른 엘리먼트로 그리면, 리렌더 시 버튼이 언마운트되면서 포인터 캡처가 풀려 `pointerup`(=`throwRelease`)이 안 잡힌다. 반드시 하나의 엘리먼트를 유지하고 라벨/속성만 바꿀 것. (`docs/TROUBLESHOOTING.md` #9 — 이번 프로젝트에서 가장 심각했던 버그)
+- **포인터 캡처를 쥔 엘리먼트를 `gaugePhase` 전환 중 조건부로 언마운트/교체하지 말 것** — 더 이상 전용 던지기 버튼은 없고, 이제 `GameBoard.tsx`의 루트 `<div>`(보드 전체 영역)가 `onPointerDown`/`onPointerUp`과 `setPointerCapture`를 직접 갖는다. 이 div는 게임 내내 계속 마운트돼 있어야 한다 — `idle`/`charging`/`resolved` 등 `gaugePhase`별로 이 루트를 다른 엘리먼트로 갈아끼우거나, 포인터 핸들러를 (조건부 렌더링되는) 자식 엘리먼트로 옮기면, 리렌더 시 캡처가 풀려 `pointerup`(=`throwRelease`)이 안 잡힌다. 즉 버튼이 사라졌다고 이 제약도 함께 사라진 게 아니라, 지금은 보드 전체가 살아있는 던지기 트리거이므로 오히려 똑같이(혹은 더) 중요하다. (`docs/TROUBLESHOOTING.md` #9 — 이번 프로젝트에서 가장 심각했던 버그)
 - **Colyseus `sessionId`는 하이픈(`-`)을 포함할 수 있다** — `pieceId`(`` `${sessionId}-${i}` ``)에서 말 번호를 뽑을 때 `split("-")[1]`을 쓰면 깨진다. 항상 `split("-").pop()`(마지막 조각)을 쓸 것. (`docs/TROUBLESHOOTING.md` #10)
-- **알려진 한계, 고치지 않기로 함**: `GameBoard`의 대기/완주 트레이는 `room.state.players`를 순회해서 만들어지므로, 연결이 끊긴 플레이어의 말은 보드 어디에도 안 그려질 수 있다(서버 상태 자체는 정상, 클라이언트 표시만 비는 것). 재접속/이탈 정책을 별도로 만들지 않기로 한 결정과 같은 맥락 — 필요해지면 그때 다시 설계할 것.
-- **알려진 한계, 다음 시각화 플랜에서 해결 예정**: `GameBoard.tsx`가 `outer`/`center`/`start`/`finished` 위치의 말만 그리므로, 지름길 중간칸(`shortcutIn`/`shortcutOut`)에 있는 말은 서버 상태는 정상인데도 화면 어디에도(보드/대기/완주 트레이) 안 보인다. `TurnPanel.tsx`의 `positionDescription`은 텍스트로는 칸을 구분해서 보여주니(예: "10번 지름길 1칸") 완전히 알 방법이 없진 않지만, 실제 좌표 렌더링은 실제 윷판 모양(정사각형 트랙)을 그리는 후속 시각화 플랜의 몫이다.
+- **알려진 한계, 고치지 않기로 함**: 대기 중인 말 표시는 `PlayerCorner`가 `assignCorners`(`client/src/game/cornerSlots.ts`, `room.state.turnOrder` 기반으로 모서리 배치)로 결정된 모서리 카드 안에서 그린다. 연결이 끊긴 플레이어라도 `turnOrder`에 남아 있는 한 모서리 자체는 배정되지만, 그 플레이어의 팀 정보(`players.get(...).team`)가 비어 있으면 말 색상 등 표시가 무너질 수 있다(서버 상태 자체는 정상, 클라이언트 표시만 영향받는 것). 재접속/이탈 정책을 별도로 만들지 않기로 한 결정과 같은 맥락 — 필요해지면 그때 다시 설계할 것.
 
 ## Key docs
 
@@ -71,4 +70,4 @@ npm run build  # tsc -b && vite build
 - 클라이언트는 테스트 프레임워크 없이 `npm run build` + 실제 브라우저 확인으로 검증(위 Commands 참고).
 - 구현은 subagent-driven-development(브레인스토밍 → 계획 문서 → 태스크별 서브에이전트 구현+리뷰 → 전체 브랜치 최종 리뷰)로 진행해왔음, `main`에 직접 커밋(songpyeon과 동일 관례, 별도 브랜치/PR 안 씀).
 - 커밋 메시지는 한국어로, `feat:`/`fix:` 같은 프리픽스 없이 작성.
-- REQUIREMENTS.md 범위 내 기능(서버 엔진, 대기실/플레이 UI, 게이지·Matter.js 던지기 연출, 채팅/말풍선, 캐릭터 능력, 1v1 모드, 지름길 정확 모델)은 전부 구현 완료. 남은 후보는 실제 윷판 모양 시각화(정사각형 트랙 + 캐릭터 표시된 말, 위 "보드 좌표계" 절의 지름길 모델을 기반으로 좌표 렌더링)와 배포 방식 결정(REQUIREMENTS.md §11) 정도. 15번 모서리 지름길 밸런스 역전은 위 "보드 좌표계" 절 참고 — 이미 결정 끝난 사안(그대로 유지, 재검토는 실제 플레이테스트 문제 생기면).
+- REQUIREMENTS.md 범위 내 기능(서버 엔진, 대기실/플레이 UI, 게이지·Matter.js 던지기 연출, 채팅/말풍선, 캐릭터 능력, 1v1 모드, 지름길 정확 모델, 실제 윷판 모양 시각화)은 전부 구현 완료. 남은 후보는 배포 방식 결정(REQUIREMENTS.md §11) 정도. 15번 모서리 지름길 밸런스 역전은 위 "보드 좌표계" 절 참고 — 이미 결정 끝난 사안(그대로 유지, 재검토는 실제 플레이테스트 문제 생기면).
