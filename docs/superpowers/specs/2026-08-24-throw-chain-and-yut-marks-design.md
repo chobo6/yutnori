@@ -28,8 +28,8 @@
 
 1. `movePiece` 메시지가 지정한 `resultId`에 해당하는 항목을 `pendingResults`에서 제거(§1.2), 말 위치들을 갱신.
 2. **승리 판정(`checkWinner`)을 지금처럼 여기서 먼저 확인** — 완주했다면 `phase = "finished"`로 바꾸고 즉시 반환. 남은 패나 부여될 예정이던 보너스 던지기와 무관하게 게임이 끝난다(아래 3~6은 승리하지 않았을 때만 진행).
-3. 원래 이동으로 잡힌 말이 있고(`capturedPieceIds.length > 0`) `extraThrowsGranted < 2`면: `extraThrowsGranted++`, `throwsOwed++`.
-4. 교주 능력 보너스 전진으로 **추가로** 잡힌 말이 있고(`bonus.capturedPieceIds.length > 0`) `extraThrowsGranted < 2`면: 별도로 한 번 더 `extraThrowsGranted++`, `throwsOwed++`(한 번의 `movePiece`에서 최대 2회 부여 가능).
+3. 원래 이동으로 "유효하게"(의사에게 무효화되지 않고, §2.1 참고) 잡힌 말이 있고 `extraThrowsGranted < 2`면: `extraThrowsGranted++`, `throwsOwed++`.
+4. 교주 능력 보너스 전진으로 **추가로** "유효하게" 잡힌 말이 있고(§2.1) `extraThrowsGranted < 2`면: 별도로 한 번 더 `extraThrowsGranted++`, `throwsOwed++`(한 번의 `movePiece`에서 최대 2회 부여 가능).
 5. `throwsOwed > 0`이면: `throwsOwed--`, `gaugePhase = "idle"`, 던지기 제한시간 재무장, 반환(남은 `pendingResults`는 그대로 대기).
 6. 아니고 `pendingResults`가 아직 남아있으면: `gaugePhase`는 `"resolved"` 유지, 말 선택 제한시간 재무장(다음 패 사용을 기다림).
 7. 아니면(빈 `pendingResults`, `throwsOwed`도 0): 지금처럼 `nextTurnIndex`로 턴을 넘기고 `extraThrowsGranted`/`throwsOwed`를 0으로 리셋, 다음 사람의 던지기 제한시간 재무장. (`nextTurnIndex`의 윷/모 분기는 이제 항상 거짓이 되므로 — 턴 유지 여부는 이 상태 기계가 전부 처리 — 해당 분기는 삭제하고 인자에서 `result`도 뺀다.)
@@ -78,6 +78,52 @@ export class PendingResultSchema extends Schema {
 - 그 이동에서 교주 능력 보너스 전진(`applyGyojuBonus`)이 **추가로** 상대 말을 잡으면, 별도의 이동으로 간주해 **또 1회** 부여 — 한 번의 `movePiece`에서 최대 2회까지 가능.
 - 윷/모 보너스와 잡기 보너스는 **하나의 공유 예산**(`extraThrowsGranted`, 최대 2)을 쓴다 — 출처가 섞여도(윷 1번 + 잡기 1번, 잡기 2번, 윷 2번 등) 합쳐서 최대 2회 추가, 즉 **턴당 최대 3회**(첫 던지기 + 추가 2회) 던질 수 있다.
 - 추가 던지기는 **그 자리에서 즉시** 실행된다 — 아직 쓰지 않은 `pendingResults`가 남아있어도 먼저 끼어든다(§1.1 "이동이 끝날 때" 스텝 5). 실행 후 남은 패는 그대로 대기열에 남는다.
+
+### 2.1 의사/성직 응답에 따른 보너스 지급 여부 (확정)
+
+`abilities.ts`의 `resolveCaptureResponses`는 잡힘 이후 상대팀 의사/성직 능력으로 결과가 다시 바뀔 수 있다 — 이 결과에 따라 보너스 지급 여부가 갈린다:
+
+- **의사가 성공해서 잡힌 말이 원래 자리로 복원되면(사실상 잡기 무효화)** → 그 캡처는 보너스 지급 대상에서 **제외**한다.
+- **성직이 성공해서 잡힌 말이 성직 위치로 순간이동하면** → 잡은 사람에게는 그래도 잡은 것으로 쳐서 **보너스 지급**.
+- 둘 다 실패하거나 후보가 없어 잡힌 말이 그대로 `start`로 돌아가면 → 당연히 **보너스 지급**.
+- 한 번의 이동으로 여러 마리를 동시에 잡았다면(업기 스택), 그중 **하나라도** 의사에게 무효화되지 않고 살아남으면 그 이동은 보너스 지급 대상.
+
+**`resolveCaptureResponses`의 반환 타입 변경**이 필요하다 — 지금은 `Piece[]`만 반환하지만, 어떤 `pieceId`가 의사에 의해 무효화됐는지(성직 리다이렉트나 무응답은 포함 안 됨) 호출부(`MatchRoom`)가 알아야 한다:
+
+```ts
+// abilities.ts
+export interface CaptureResponseResult {
+  pieces: Piece[];
+  /** 의사 능력으로 원위치 복원되어 "사실상 무효화"된 캡처의 pieceId 목록 — 잡기 보너스 던지기 지급 대상에서 뺀다. */
+  negatedPieceIds: PieceId[];
+}
+
+function resolveOneCapture(pieces: Piece[], capture: CaptureRecord, rng: Rng): { pieces: Piece[]; negated: boolean } {
+  const restored = tryUisa(pieces, capture, rng);
+  if (restored) return { pieces: restored, negated: true };
+  const redirected = trySeongjik(pieces, capture, rng);
+  if (redirected) return { pieces: redirected, negated: false };
+  return { pieces, negated: false };
+}
+
+export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): CaptureResponseResult {
+  let result = pieces;
+  const negatedPieceIds: PieceId[] = [];
+  for (const capture of captures) {
+    const outcome = resolveOneCapture(result, capture, rng);
+    result = outcome.pieces;
+    if (outcome.negated) negatedPieceIds.push(capture.pieceId);
+  }
+  return { pieces: result, negatedPieceIds };
+}
+```
+
+`MatchRoom.performMove`의 호출부는 `const { pieces: updated, negatedPieceIds } = resolveCaptureResponses(...)`로 구조분해하고, §1.1 스텝 3/4의 보너스 판정을 다음으로 바꾼다:
+
+- 스텝 3: `mainCaptureRecords.some((c) => !negatedPieceIds.includes(c.pieceId))`이면 부여.
+- 스텝 4: `bonusCaptureRecords.some((c) => !negatedPieceIds.includes(c.pieceId))`이면 부여.
+
+**`abilities.test.ts` 영향**: `resolveCaptureResponses`를 직접 호출하는 기존 테스트 12곳 전부 `const result = resolveCaptureResponses(...)` 뒤에 `result.find(...)`를 쓰고 있다 — 반환 타입이 바뀌므로 전부 `const { pieces: result } = resolveCaptureResponses(...)`로 구조분해를 추가해야 한다(변수명 `result`는 유지해 나머지 코드는 그대로 두는 최소 diff). 의사 무효화가 `negatedPieceIds`에 정확히 반영되는지 검증하는 새 테스트도 추가한다.
 
 ## 3. 빽도 판정 방식 변경
 
@@ -177,6 +223,7 @@ function drawX(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number)
 
 - `gauge.test.ts`: §3.2에 정리된 대로 빽도 관련 1개 테스트를 결정적 rng 2개 테스트로 교체.
 - `turns.test.ts`: §1.1에 정리된 대로 윷/모 관련 2개 테스트를 삭제(대체 불필요).
+- `abilities.test.ts`: §2.1에 정리된 대로 `resolveCaptureResponses` 반환 타입 변경으로 기존 호출부 12곳에 구조분해(`const { pieces: result } = ...`) 추가, 의사 무효화가 `negatedPieceIds`에 반영되는지 검증하는 테스트 추가.
 - **`MatchRoom.test.ts`(148개 중 상당수가 던지기/이동 흐름을 다룸)**: `movePiece`가 이제 `resultId`를 요구하므로, 기존에 `client.send("movePiece", { pieceId })`처럼 보내던 테스트는 전부 `resultId`를 함께 보내도록 고쳐야 한다. 또한 "윷이 나오면 이동 후 같은 사람이 다시 던진다" 같은 기존 통합 테스트는 이제 "윷이 나오면 이동 없이 바로 재던지기 가능 상태가 된다"로 전제 자체가 바뀌므로 새로 작성해야 한다. 이 파급 범위가 커서, 다음 단계(구현 계획)에서 "기존 테스트 전수 점검 및 재작성"을 별도 태스크로 분리하는 걸 권장한다.
 
 ## 6. 범위 밖
