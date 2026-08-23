@@ -59,6 +59,7 @@
   position: absolute;
   top: calc(var(--i) * -6px);
   left: calc(var(--i) * -6px);
+  transform: translate(-50%, -50%);
 }
 
 .centerOverlay {
@@ -71,6 +72,6 @@
   pointer-events: none;
 }
 
-.centerOverlay button {
+.centerOverlay :is(button, input, label) {
   pointer-events: auto;
 }
