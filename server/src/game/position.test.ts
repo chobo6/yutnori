@@ -49,7 +49,27 @@ describe("moveForward", () => {
 
     it("3칸(걸)이면 중앙에 도착한다", () => {
       const result = moveForward({ kind: "outer", index: 10 }, 3, true);
-      expect(result).toEqual({ kind: "center" });
+      expect(result).toEqual({ kind: "center", exitVia: "finish" });
+    });
+
+    it("5번에서 3칸(걸)이면 중앙에 도착하고 cross 트랙으로 기록된다", () => {
+      const result = moveForward({ kind: "outer", index: 5 }, 3, true);
+      expect(result).toEqual({ kind: "center", exitVia: "cross" });
+    });
+
+    it("10번/15번에서 3칸(걸)이면 중앙에 도착하고 finish 트랙으로 기록된다(기존 동작 유지)", () => {
+      expect(moveForward({ kind: "outer", index: 10 }, 3, true)).toEqual({ kind: "center", exitVia: "finish" });
+      expect(moveForward({ kind: "outer", index: 15 }, 3, true)).toEqual({ kind: "center", exitVia: "finish" });
+    });
+
+    it("5번에서 4칸(윷)이면 shortcutCross 1단계다(shortcutOut이 아님)", () => {
+      const result = moveForward({ kind: "outer", index: 5 }, 4, true);
+      expect(result).toEqual({ kind: "shortcutCross", step: 1 });
+    });
+
+    it("5번에서 5칸(모)이면 shortcutCross 2단계다", () => {
+      const result = moveForward({ kind: "outer", index: 5 }, 5, true);
+      expect(result).toEqual({ kind: "shortcutCross", step: 2 });
     });
 
     it("4칸(윷)이면 shortcutOut 1단계", () => {
@@ -76,9 +96,20 @@ describe("moveForward", () => {
       expect(result).toEqual({ kind: "shortcutIn", junction: 5, step: 2 });
     });
 
-    it("2단계에서 1칸 더 가면 중앙에 도착한다", () => {
+    it("2단계에서 1칸 더 가면 중앙에 도착한다(5번 진입이므로 cross 트랙)", () => {
       const result = moveForward({ kind: "shortcutIn", junction: 5, step: 2 }, 1, false);
-      expect(result).toEqual({ kind: "center" });
+      expect(result).toEqual({ kind: "center", exitVia: "cross" });
+    });
+
+    it("10번/15번 shortcutIn 2단계에서 1칸 더 가면 finish 트랙 중앙에 도착한다(기존 동작 유지)", () => {
+      expect(moveForward({ kind: "shortcutIn", junction: 10, step: 2 }, 1, false)).toEqual({
+        kind: "center",
+        exitVia: "finish",
+      });
+      expect(moveForward({ kind: "shortcutIn", junction: 15, step: 2 }, 1, false)).toEqual({
+        kind: "center",
+        exitVia: "finish",
+      });
     });
 
     it("1단계에서 모(5칸)를 가면 중앙과 도착 구간을 다 지나 완주한다(1+5=6)", () => {
@@ -93,20 +124,20 @@ describe("moveForward", () => {
     });
   });
 
-  describe("center에서 계속 진행 (항상 도착 방향으로 자동)", () => {
+  describe("center(exitVia=finish)에서 계속 진행 (10번/15번 진입 — 항상 도착 방향으로 자동)", () => {
     it("1칸 가면 shortcutOut 1단계", () => {
-      const result = moveForward({ kind: "center" }, 1, false);
+      const result = moveForward({ kind: "center", exitVia: "finish" }, 1, false);
       expect(result).toEqual({ kind: "shortcutOut", step: 1 });
     });
 
     it("2칸 가면 shortcutOut 2단계", () => {
-      const result = moveForward({ kind: "center" }, 2, false);
+      const result = moveForward({ kind: "center", exitVia: "finish" }, 2, false);
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
     });
 
     it("3칸 이상 가면 완주한다", () => {
-      expect(moveForward({ kind: "center" }, 3, false)).toEqual({ kind: "finished" });
-      expect(moveForward({ kind: "center" }, 5, true)).toEqual({ kind: "finished" });
+      expect(moveForward({ kind: "center", exitVia: "finish" }, 3, false)).toEqual({ kind: "finished" });
+      expect(moveForward({ kind: "center", exitVia: "finish" }, 5, true)).toEqual({ kind: "finished" });
     });
   });
 
@@ -125,6 +156,55 @@ describe("moveForward", () => {
       const result = moveForward({ kind: "shortcutOut", step: 2 }, 1, false);
       expect(result).toEqual({ kind: "finished" });
     });
+  });
+});
+
+describe("cross 트랙 (5번 지름길 — 15번으로 실제 교차)", () => {
+  it("centerCross(중앙, exitVia=cross)에서 1칸 가면 shortcutCross 1단계", () => {
+    const result = moveForward({ kind: "center", exitVia: "cross" }, 1, false);
+    expect(result).toEqual({ kind: "shortcutCross", step: 1 });
+  });
+
+  it("centerCross에서 2칸 가면 shortcutCross 2단계", () => {
+    const result = moveForward({ kind: "center", exitVia: "cross" }, 2, false);
+    expect(result).toEqual({ kind: "shortcutCross", step: 2 });
+  });
+
+  it("centerCross에서 3칸 가면 정확히 외곽 15번 칸에 착지한다(완주가 아님)", () => {
+    const result = moveForward({ kind: "center", exitVia: "cross" }, 3, false);
+    expect(result).toEqual({ kind: "outer", index: 15 });
+  });
+
+  it("shortcutCross 1단계에서 1칸 더 가면 2단계", () => {
+    const result = moveForward({ kind: "shortcutCross", step: 1 }, 1, false);
+    expect(result).toEqual({ kind: "shortcutCross", step: 2 });
+  });
+
+  it("shortcutCross 1단계에서 2칸 더 가면 외곽 15번 칸(완주 아님)", () => {
+    const result = moveForward({ kind: "shortcutCross", step: 1 }, 2, false);
+    expect(result).toEqual({ kind: "outer", index: 15 });
+  });
+
+  it("shortcutCross 2단계에서 1칸 더 가면 외곽 15번 칸", () => {
+    const result = moveForward({ kind: "shortcutCross", step: 2 }, 1, false);
+    expect(result).toEqual({ kind: "outer", index: 15 });
+  });
+
+  it("shortcutCross 2단계에서 여러 칸 가면 15번을 넘어 정상적으로 바깥길을 계속 간다(15+2=17)", () => {
+    const result = moveForward({ kind: "shortcutCross", step: 2 }, 3, false);
+    expect(result).toEqual({ kind: "outer", index: 17 });
+  });
+
+  it("cross 트랙에서 완주 지점(19)을 넘기면 정상적으로 완주한다", () => {
+    // shortcutCross step2(절대값5) + 6칸 = 절대값11 → outer(15+5)=20 → 19 초과 → finished
+    const result = moveForward({ kind: "shortcutCross", step: 2 }, 6, false);
+    expect(result).toEqual({ kind: "finished" });
+  });
+
+  it("useShortcut 인자는 cross 트랙에서도 무시된다", () => {
+    const withTrue = moveForward({ kind: "shortcutCross", step: 1 }, 1, true);
+    const withFalse = moveForward({ kind: "shortcutCross", step: 1 }, 1, false);
+    expect(withTrue).toEqual(withFalse);
   });
 });
 
@@ -174,7 +254,7 @@ describe("sideOf", () => {
 
   it("start/center/finished는 어느 변에도 속하지 않는다", () => {
     expect(sideOf({ kind: "start" })).toBeNull();
-    expect(sideOf({ kind: "center" })).toBeNull();
+    expect(sideOf({ kind: "center", exitVia: "finish" })).toBeNull();
     expect(sideOf({ kind: "finished" })).toBeNull();
   });
 
@@ -195,7 +275,7 @@ describe("sameSide", () => {
 
   it("둘 중 하나라도 변이 없으면(start/center/finished) false", () => {
     expect(sameSide({ kind: "start" }, { kind: "outer", index: 3 })).toBe(false);
-    expect(sameSide({ kind: "outer", index: 3 }, { kind: "center" })).toBe(false);
+    expect(sameSide({ kind: "outer", index: 3 }, { kind: "center", exitVia: "finish" })).toBe(false);
     expect(sameSide({ kind: "finished" }, { kind: "start" })).toBe(false);
   });
 });
