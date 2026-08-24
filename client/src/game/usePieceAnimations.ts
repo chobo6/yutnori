@@ -33,7 +33,6 @@ export function usePieceAnimations(room: Room<MatchState>): Record<string, Coord
         if (!piece) continue;
 
         const fromCoords = positionToCoords(piece.previousPositionKind, piece.previousPositionIndex);
-        if (!fromCoords) continue; // 시작(start)에서 나가는 등 출발 좌표가 없으면 그냥 즉시 스냅
 
         const path =
           steps < 0
@@ -46,28 +45,43 @@ export function usePieceAnimations(room: Room<MatchState>): Record<string, Coord
               )
                 .map((p) => positionToCoords(p.kind, p.index))
                 .filter((c): c is Coords => c !== null);
-        if (path.length === 0) continue;
+        if (path.length === 0) continue; // 도착 좌표조차 없는 경우(예: 빽도로 다시 start行)는 스냅
 
-        setOverrides((prev) => ({ ...prev, [pieceId]: fromCoords }));
-        path.forEach((coords, i) => {
-          const timer = setTimeout(
-            () => {
-              setOverrides((prev) => ({ ...prev, [pieceId]: coords }));
-              if (i === path.length - 1) {
-                const clearTimer = setTimeout(() => {
-                  setOverrides((prev) => {
-                    const next = { ...prev };
-                    delete next[pieceId];
-                    return next;
-                  });
-                }, HOP_MS);
-                timers.push(clearTimer);
-              }
-            },
-            (i + 1) * HOP_MS,
-          );
-          timers.push(timer);
-        });
+        // 출발(start)처럼 보드 위 좌표가 없는 위치에서 나가는 이동은 "어디서 왔는지" 보여줄
+        // 좌표가 아예 없다 — 그 첫 홉만 트랜지션 없이 즉시 그 자리에 나타나는 것으로 처리하고
+        // (막 대기 칸에서 등장하는 자연스러운 연출), 이후 홉부터는 정상적으로 애니메이션한다.
+        // 예전에는 이 경우 전체를 건너뛰어(continue) 대기 중이던 말의 첫 이동(걸/개/윷/모처럼
+        // 2칸 이상)이 통째로 순간이동해버렸다.
+        const initialCoords = fromCoords ?? path[0];
+        const remainingPath = fromCoords ? path : path.slice(1);
+
+        setOverrides((prev) => ({ ...prev, [pieceId]: initialCoords }));
+
+        function scheduleClear() {
+          const clearTimer = setTimeout(() => {
+            setOverrides((prev) => {
+              const next = { ...prev };
+              delete next[pieceId];
+              return next;
+            });
+          }, HOP_MS);
+          timers.push(clearTimer);
+        }
+
+        if (remainingPath.length === 0) {
+          scheduleClear();
+        } else {
+          remainingPath.forEach((coords, i) => {
+            const timer = setTimeout(
+              () => {
+                setOverrides((prev) => ({ ...prev, [pieceId]: coords }));
+                if (i === remainingPath.length - 1) scheduleClear();
+              },
+              (i + 1) * HOP_MS,
+            );
+            timers.push(timer);
+          });
+        }
       }
     });
 
