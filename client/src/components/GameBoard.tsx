@@ -45,7 +45,17 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
 
   useEffect(() => {
     const isChainReady = room.state.gaugePhase === "idle" && room.state.lastThrowResult !== "";
-    if (!isChainReady || room.state.throwStartAt === lastHandledThrowStartAt.current) return;
+    if (!isChainReady) {
+      // 체인 조건이 아니게 됐다면(턴이 실제로 다음 사람에게 넘어간 경우 등) 항상 정리한다.
+      // 예전엔 여기서 그냥 return만 해서, 체인 애니메이션이 뜬 지 CHAIN_ANIM_MS가 채 지나기
+      // 전에 턴이 넘어가면 — 이 effect가 다시 실행되며 클린업이 아직 안 끝난 타이머를 지워
+      // 버리지만 그 타이머가 하려던 "null로 되돌리기"를 대신해주는 코드가 없어서
+      // chainAnimatingResult가 영원히 그 값에 멈춰버렸다. 다음 차례 플레이어 화면에 상대의
+      // 마지막 체인 결과 화면이 계속 떠서 던지기 자체가 막히는 버그의 원인이었다.
+      setChainAnimatingResult(null);
+      return;
+    }
+    if (room.state.throwStartAt === lastHandledThrowStartAt.current) return;
     lastHandledThrowStartAt.current = room.state.throwStartAt;
     setChainAnimatingResult(room.state.lastThrowResult);
     const timer = setTimeout(() => setChainAnimatingResult(null), CHAIN_ANIM_MS);
