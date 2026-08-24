@@ -17,7 +17,7 @@ describe("wavePosition", () => {
 });
 
 describe("resolveThrow", () => {
-  // 경계: [0,.0625)모 [.0625,.125)윷 [.125,.375)걸 [.375,.75)개 [.75,.8125)빽도 [.8125,1.0)도
+  // 경계: [0,.0625)모 [.0625,.125)윷 [.125,.375)걸 [.375,.75)개 [.75,1.0)도(rng<0.25면 빽도로 재판정)
   // wavePosition은 0->1로 선형 증가하는 구간(전반부, elapsed < cycleMs/2)만 사용해 경계 계산을 쉽게 한다.
   const cycleMs = 1500; // 전반부(0~750ms)가 0~1 선형 구간
 
@@ -41,14 +41,14 @@ describe("resolveThrow", () => {
     expect(resolveThrow(0, elapsed, cycleMs)).toBe("gae");
   });
 
-  it("파형 0.78 지점(빽도 구간)이면 빽도가 나온다", () => {
-    const elapsed = 0.78 * (cycleMs / 2);
-    expect(resolveThrow(0, elapsed, cycleMs)).toBe("backDo");
+  it("도 구간이고 rng<0.25면 빽도가 나온다", () => {
+    const elapsed = 0.9 * (cycleMs / 2);
+    expect(resolveThrow(0, elapsed, cycleMs, () => 0.1)).toBe("backDo");
   });
 
-  it("파형 0.9 지점(도 구간)이면 도가 나온다", () => {
+  it("도 구간이고 rng>=0.25면 도가 나온다", () => {
     const elapsed = 0.9 * (cycleMs / 2);
-    expect(resolveThrow(0, elapsed, cycleMs)).toBe("do");
+    expect(resolveThrow(0, elapsed, cycleMs, () => 0.5)).toBe("do");
   });
 
   it("startAtMs와 releaseAtMs의 차이만 판정에 사용한다 (절대 시각 무관)", () => {

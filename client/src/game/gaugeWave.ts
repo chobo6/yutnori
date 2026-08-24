@@ -23,11 +23,12 @@ export interface GaugeZone {
 }
 
 // server/src/game/gauge.ts의 ZONES와 순서/경계값 동일 (REQUIREMENTS.md §5).
+// 빽도는 이제 게이지 zone이 아니라 "도" 판정 후 서버가 별도 확률로 재판정하므로(2026-08-24),
+// 게이지 막대에는 표시하지 않는다 — 타이밍으로 노릴 수 없다는 걸 시각적으로도 드러낸다.
 export const GAUGE_ZONES: GaugeZone[] = [
   { result: "mo", label: "모", upperBound: 0.0625, color: "#c0392b" },
   { result: "yut", label: "윷", upperBound: 0.125, color: "#8e44ad" },
   { result: "geol", label: "걸", upperBound: 0.375, color: "#2980b9" },
   { result: "gae", label: "개", upperBound: 0.75, color: "#27ae60" },
-  { result: "backDo", label: "빽도", upperBound: 0.8125, color: "#f39c12" },
   { result: "do", label: "도", upperBound: 1.0, color: "#7f8c8d" },
 ];
