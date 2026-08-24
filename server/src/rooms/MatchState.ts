@@ -21,6 +21,13 @@ export class PieceSchema extends Schema {
   @type("number") previousPositionIndex: number = -1;
 }
 
+export class PendingResultSchema extends Schema {
+  /** 서버 발급 안정 id — 같은 결과(예: "개")가 중복 쌓여도 클라이언트가 특정 항목을 지정할 수 있게 함. */
+  @type("string") id: string = "";
+  /** YutResult 코드("mo"|"yut"|"geol"|"gae"|"do"|"backDo"). */
+  @type("string") result: string = "";
+}
+
 export class MatchState extends Schema {
   @type("string") phase: string = "waiting"; // "waiting" | "playing" | "finished"
   @type("string") mode: string = "2v2"; // "2v2" | "1v1"
@@ -32,6 +39,8 @@ export class MatchState extends Schema {
   @type("number") throwStartAt: number = 0;
   /** 직전 던지기 결과(YutResult). 아직 던지지 않았거나 이동을 마쳐 소진되면 "". */
   @type("string") lastThrowResult: string = "";
+  /** 아직 소진하지 않은 던지기 결과들 — 윷/모 연속 던지기나 잡기 보너스로 여러 개 쌓일 수 있다. */
+  @type([PendingResultSchema]) pendingResults = new ArraySchema<PendingResultSchema>();
   /** 현재 턴(던지기 또는 말 선택) 제한시간이 끝나는 절대 시각(ms epoch). 활성 제한이 없으면 0. */
   @type("number") turnDeadlineAt: number = 0;
   @type("string") winnerSessionId: string = "";
