@@ -26,6 +26,11 @@ export interface PieceState {
   previousPositionIndex: number;
 }
 
+export interface PendingResultState {
+  id: string;
+  result: string;
+}
+
 export interface MatchState {
   phase: "waiting" | "playing" | "finished";
   mode: "2v2" | "1v1";
@@ -36,6 +41,7 @@ export interface MatchState {
   gaugePhase: "idle" | "charging" | "resolved";
   throwStartAt: number;
   lastThrowResult: string;
+  pendingResults: PendingResultState[];
   turnDeadlineAt: number;
   winnerSessionId: string;
 }

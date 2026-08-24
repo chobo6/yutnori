@@ -17,3 +17,18 @@
   display: flex;
   gap: 2px;
 }
+
+.pendingRow {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pendingBadge {
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #8a7550;
+  color: #fffdf7;
+}

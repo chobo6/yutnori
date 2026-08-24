@@ -5,6 +5,7 @@ import {
   SHORTCUT_JUNCTION_INDICES,
   YUT_RESULT_LABELS,
   type MatchState,
+  type PendingResultState,
   type PieceState,
 } from "../game/matchTypes";
 import { playerLabel } from "../game/playerLabel";
@@ -54,6 +55,7 @@ export function TurnPanel({
   chargeStartedAt: number;
 }) {
   const [, setTick] = useState(0);
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setTick((n) => n + 1), 1000);
@@ -63,9 +65,16 @@ export function TurnPanel({
   const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
   const isMyTurn = currentSessionId === room.sessionId;
   const remainingSeconds = Math.max(0, Math.ceil((room.state.turnDeadlineAt - Date.now()) / 1000));
+  const pendingResults = room.state.pendingResults;
+
+  // 쌓인 패 목록이 바뀔 때마다(새로 쌓이거나 하나가 소진되면) 선택이 더 이상 유효하지 않을 수
+  // 있다 — 유효하지 않으면 항상 가장 먼저 쌓인 패를 기본 선택으로 되돌린다.
+  const selected: PendingResultState | undefined =
+    pendingResults.find((r) => r.id === selectedResultId) ?? pendingResults[0];
 
   function moveMyPiece(pieceId: string, useShortcut: boolean) {
-    room.send("movePiece", { pieceId, useShortcut });
+    if (!selected) return;
+    room.send("movePiece", { pieceId, resultId: selected.id, useShortcut });
   }
 
   return (
@@ -83,10 +92,25 @@ export function TurnPanel({
       {/* 게이지 막대는 순수 시각 힌트 — 실제 결과는 서버가 재계산한 값을 따른다. */}
       {isMyTurn && room.state.gaugePhase === "charging" && <GaugeBar startedAt={chargeStartedAt} />}
 
-      {isMyTurn && room.state.gaugePhase === "resolved" && (
+      {isMyTurn && room.state.gaugePhase === "resolved" && selected && (
         <div>
           <YutSticks result={room.state.lastThrowResult || null} />
-          <p>결과: {YUT_RESULT_LABELS[room.state.lastThrowResult] ?? room.state.lastThrowResult}</p>
+          {pendingResults.length > 1 && (
+            <div>
+              <p>사용할 패를 고르세요:</p>
+              {pendingResults.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedResultId(r.id)}
+                  disabled={r.id === selected.id}
+                >
+                  {YUT_RESULT_LABELS[r.result] ?? r.result}
+                </button>
+              ))}
+            </div>
+          )}
+          <p>결과: {YUT_RESULT_LABELS[selected.result] ?? selected.result}</p>
           <p>이동할 말을 고르세요:</p>
           {Array.from(room.state.pieces)
             .filter((p) => p.ownerSessionId === room.sessionId && p.positionKind !== "finished")
