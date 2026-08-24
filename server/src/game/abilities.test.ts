@@ -18,11 +18,23 @@ function piece(id: string, ownerId: string, teamId: string, character: string, i
 }
 
 describe("applyGyojuBonus", () => {
-  it("이동한 말이 교주가 아니면 아무 일도 없다", () => {
+  it("이동한 말도 업힌 말도 교주가 아니면 아무 일도 없다", () => {
     const pieces = [piece("p1", "alice", "A", "성직", 8), piece("p2", "alice", "A", "의사", 8)];
     const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
     expect(result.pieces).toEqual(pieces);
     expect(result.capturedPieceIds).toEqual([]);
+    expect(result.fired).toBe(false);
+  });
+
+  it("이동한 말은 교주가 아니어도 업힌 말이 교주면 발동한다(2026-08-24 조건 확장)", () => {
+    const pieces = [piece("p1", "alice", "A", "성직", 8), piece("p2", "alice", "A", "교주", 8)];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const p1 = result.pieces.find((p) => p.id === "p1")!;
+    const p2 = result.pieces.find((p) => p.id === "p2")!;
+    expect(result.fired).toBe(true);
+    expect(result.triggeredBy).toBe("p2"); // 업혀서 따라온 교주 쪽이 발동 주체
+    expect(p1.position).toEqual({ kind: "outer", index: 9 }); // 그룹 전원 전진
+    expect(p2.position).toEqual({ kind: "outer", index: 9 });
   });
 
   it("업힌 말이 없으면(piggybackedIds 빈 배열) 발동하지 않는다", () => {
@@ -45,6 +57,17 @@ describe("applyGyojuBonus", () => {
     const p2 = result.pieces.find((p) => p.id === "p2")!;
     expect(p1.position).toEqual({ kind: "outer", index: 9 });
     expect(p2.position).toEqual({ kind: "outer", index: 9 });
+    expect(result.triggeredBy).toBe("p1"); // 이동한 말 자신이 교주
+  });
+
+  it("업힌 그룹에 교주가 여럿이면 그중 하나를 triggeredBy로 보고한다", () => {
+    const pieces = [
+      piece("p1", "alice", "A", "교주", 8),
+      piece("p2", "alice", "A", "교주", 8), // 1v1 중복 캐릭터 상황 가정
+    ];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(true);
+    expect(["p1", "p2"]).toContain(result.triggeredBy);
   });
 
   it("보너스 전진 칸에 상대 말이 있으면 잡아서 capturedPieceIds에 담는다", () => {

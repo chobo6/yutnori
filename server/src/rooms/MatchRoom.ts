@@ -155,6 +155,17 @@ export class MatchRoom extends Room<MatchState> {
     this.broadcast("abilityTriggered", { pieceId, character });
   }
 
+  /**
+   * 말 이동(원래 이동 또는 교주 보너스 전진)이 있을 때마다 브로드캐스트 — 상태에는 저장하지
+   * 않는다(채팅/능력 말풍선과 같은 패턴). 클라이언트는 각 말의 previousPosition(이미 상태에
+   * 있음)을 시작점 삼아 steps/useShortcut으로 중간 칸들을 직접 계산해 한 칸씩 이동하는
+   * 애니메이션을 재생한다 — position.ts의 이동 로직을 클라이언트에서 그대로 미러링한다
+   * (matchTypes.ts와 동일한 이 프로젝트의 확립된 관례).
+   */
+  private broadcastPieceMoved(pieceIds: string[], steps: number, useShortcut: boolean) {
+    this.broadcast("pieceMoved", { pieceIds, steps, useShortcut });
+  }
+
   private isCurrentTurn(sessionId: string): boolean {
     return this.state.phase === "playing" && this.state.turnOrder[this.state.currentTurnIndex] === sessionId;
   }
@@ -285,12 +296,17 @@ export class MatchRoom extends Room<MatchState> {
       YUT_STEPS[result],
       useShortcut,
     );
+    this.broadcastPieceMoved([pieceId, ...piggybackedIds], YUT_STEPS[result], useShortcut);
 
-    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1) — 이동한 말이 교주이고 업기가 발생했으면
-    // 80% 확률로 업힌 말 전원이 1칸 더 전진한다. 이 보너스 전진이 새로 만든 잡힘도 아래
-    // resolveCaptureResponses에 함께 넘긴다(원래 이동의 잡힘 다음 순서로).
+    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1, 2026-08-24 조건 확장) — 이번 이동으로 실제로
+    // 자리를 옮긴 말들(이동한 말 + 업힌 말들) 중 교주가 하나라도 있으면 80% 확률로 그룹 전원이
+    // 1칸 더 전진한다. 이 보너스 전진이 새로 만든 잡힘도 아래 resolveCaptureResponses에 함께
+    // 넘긴다(원래 이동의 잡힘 다음 순서로).
     const bonus = applyGyojuBonus(afterMove, pieceId, piggybackedIds, this.rng);
-    if (bonus.fired) this.broadcastAbility(pieceId, "교주");
+    if (bonus.fired && bonus.triggeredBy) {
+      this.broadcastAbility(bonus.triggeredBy, "교주");
+      this.broadcastPieceMoved([pieceId, ...piggybackedIds], 1, false);
+    }
     if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
 
     const mainCaptureRecords: CaptureRecord[] = capturedPieceIds.map((id) => {

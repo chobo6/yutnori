@@ -1,10 +1,17 @@
 .canvasWrap {
-  width: 280px;
-  height: 200px;
+  /* Matter.js 내부 시뮬레이션 해상도는 280x200으로 고정돼 있지만(YutSticks.tsx), 이 래퍼는
+     .centerOverlay(보드 너비의 55%)보다 좁아질 수 있으므로 반응형으로 줄어들게 한다 —
+     비율(280:200)은 유지한 채 캔버스 자체를 CSS로 축소해서 컨테이너 밖으로 삐져나오거나
+     옆 텍스트/버튼과 겹치지 않도록 함. */
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 280 / 200;
   border: 1px solid #333;
-  margin: 0.5rem 0;
+  margin: 0.5rem auto;
 }
 
 .canvasWrap canvas {
   display: block;
+  width: 100%;
+  height: 100%;
 }

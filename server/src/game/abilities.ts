@@ -25,6 +25,8 @@ export interface GyojuBonusResult {
   capturedPieceIds: PieceId[];
   /** 보너스 전진이 실제로 발동했는지 — UI가 "교주 발동!" 말풍선을 띄울지 판단하는 데 쓴다. */
   fired: boolean;
+  /** 발동에 성공했다면 그 교주(이동한 말 자신이거나 업혀서 함께 온 말)의 pieceId — 말풍선을 어느 말에 띄울지 판단하는 데 쓴다. */
+  triggeredBy: PieceId | null;
   /** 마담에게 저지됐다면 그 마담의 pieceId — UI가 "마담 발동!" 말풍선을 띄울지 판단하는 데 쓴다. */
   blockedBy: PieceId | null;
 }
@@ -60,9 +62,14 @@ function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosi
 }
 
 /**
- * 교주 능력(스펙 §3.1): 이번 턴에 이동한 말이 교주이고 업기가 발생했다면, 80% 확률로 업힌
- * 말 전원이 1칸 추가 전진한다. 보너스 전진 칸에 상대 말이 있으면 정상적으로 잡는다.
- * 이 함수 자체는 재귀적으로 다시 호출되지 않는다(1회성) — 호출부(MatchRoom)가 보장한다.
+ * 교주 능력(스펙 §3.1, 2026-08-24 조건 확장): 이번 이동으로 실제로 자리를 옮긴 말들
+ * (이동한 말 자신 + 업혀서 함께 온 말들) 중 교주가 하나라도 있고, 업기가 발생했다면(업힌
+ * 말이 최소 1개), 80% 확률로 그룹 전원이 1칸 추가 전진한다 — 교주가 직접 다른 말을 업고
+ * 이동한 경우뿐 아니라, 다른 말에 업혀서 따라온 말이 교주인 경우도 발동 대상이다.
+ * 보너스 전진 칸에 상대 말이 있으면 정상적으로 잡는다.
+ * 이 함수 자체는 재귀적으로 다시 호출되지 않는다(1회성) — 호출부(MatchRoom)가 보너스 전진의
+ * 결과에 대해 이 함수를 다시 부르지 않으므로, 보너스로 이동한 그룹에 또 다른 교주가 있어도
+ * 추가 발동은 일어나지 않는다.
  */
 export function applyGyojuBonus(
   pieces: Piece[],
@@ -71,20 +78,25 @@ export function applyGyojuBonus(
   rng: Rng,
 ): GyojuBonusResult {
   const mover = pieces.find((p) => p.id === moverId);
-  if (!mover || mover.character !== "교주" || piggybackedIds.length === 0 || !onBoard(mover.position)) {
-    return { pieces, capturedPieceIds: [], fired: false, blockedBy: null };
+  if (!mover || piggybackedIds.length === 0 || !onBoard(mover.position)) {
+    return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy: null };
+  }
+
+  const groupIds = new Set([moverId, ...piggybackedIds]);
+  const gyojuInGroup = pieces.find((p) => groupIds.has(p.id) && p.character === "교주");
+  if (!gyojuInGroup) {
+    return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy: null };
   }
 
   const blockedBy = isBlockedByMadam(pieces, mover.teamId, mover.position, rng);
   if (blockedBy) {
-    return { pieces, capturedPieceIds: [], fired: false, blockedBy };
+    return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy };
   }
 
   if (!roll(GYOJU_CHANCE, rng)) {
-    return { pieces, capturedPieceIds: [], fired: false, blockedBy: null };
+    return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy: null };
   }
 
-  const groupIds = new Set([moverId, ...piggybackedIds]);
   const newPosition = moveForward(mover.position, 1, false);
 
   const capturedPieceIds: PieceId[] = pieces
@@ -102,7 +114,7 @@ export function applyGyojuBonus(
     return p;
   });
 
-  return { pieces: result, capturedPieceIds, fired: true, blockedBy: null };
+  return { pieces: result, capturedPieceIds, fired: true, triggeredBy: gyojuInGroup.id, blockedBy: null };
 }
 
 interface TryResponseResult {

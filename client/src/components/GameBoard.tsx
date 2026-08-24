@@ -4,6 +4,7 @@ import type { Room } from "colyseus.js";
 import { positionToCoords, CORNERS, CENTER, OUTER_INDICES, JUNCTION_CORNER } from "../game/boardCoords";
 import type { MatchState, PieceState, PositionKind } from "../game/matchTypes";
 import { useAbilityBubbles } from "../game/useAbilityBubbles";
+import { HOP_MS, usePieceAnimations } from "../game/usePieceAnimations";
 import { PieceToken } from "./PieceToken";
 import { TurnPanel } from "./TurnPanel";
 import styles from "./GameBoard.module.css";
@@ -31,6 +32,7 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
   const [chargeStartedAt, setChargeStartedAt] = useState(0);
   const isChargingRef = useRef(false);
   const abilityBubbles = useAbilityBubbles(room);
+  const pieceAnimations = usePieceAnimations(room);
 
   // 윷/모가 나오면 서버는 이동 없이 곧바로 gaugePhase를 idle로 되돌려 즉시 재던지기를 허용한다
   // (연속 던지기 규칙) — 그대로 두면 방금 던진 결과의 윷가락 애니메이션을 볼 틈도 없이 "보드를
@@ -77,16 +79,24 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
     room.send("throwRelease", {});
   }
 
+  // 애니메이션 중인 말은 최종 상태가 "start"/"finished"라도(캡처로 시작점 복귀, 방금 완주 등)
+  // 애니메이션이 끝날 때까지는 계속 그려야 자연스럽다.
   const onBoardPieces = Array.from(room.state.pieces).filter(
-    (p) => p.positionKind !== "start" && p.positionKind !== "finished"
+    (p) => (p.positionKind !== "start" && p.positionKind !== "finished") || pieceAnimations[p.id],
   );
 
+  // 이동 애니메이션 중인 말은 positionKind/Index가 아니라 pieceId로 안정적인 key를 줘야
+  // CSS transition이 "칸 사이를 미끄러지듯" 동작한다(그룹 key가 바뀌면 React가 새 엘리먼트로
+  // 취급해서 transition이 끊긴다) — 그래서 정적인 말들과 분리해서 각각 개별 렌더링한다.
+  const staticPieces = onBoardPieces.filter((p) => !pieceAnimations[p.id]);
+  const animatingPieces = onBoardPieces.filter((p) => pieceAnimations[p.id]);
+
   const groups = new Map<string, PieceState[]>();
-  for (const piece of onBoardPieces) {
+  for (const piece of staticPieces) {
     const key = groupKey(piece);
-    const list = groups.get(key);
-    if (list) {
-      list.push(piece);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(piece);
     } else {
       groups.set(key, [piece]);
     }
@@ -139,8 +149,7 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
 
       <div className={styles.pieceLayer}>
         {Array.from(groups.entries()).map(([key, group]) => {
-          const first = group[0];
-          const coords = positionToCoords(first.positionKind, first.positionIndex);
+          const coords = positionToCoords(group[0].positionKind, group[0].positionIndex);
           if (!coords) return null;
           return (
             <div key={key} className={styles.stack} style={{ left: `${coords.x}%`, top: `${coords.y}%` }}>
@@ -156,6 +165,26 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
                   </div>
                 );
               })}
+            </div>
+          );
+        })}
+        {animatingPieces.map((piece) => {
+          const coords = pieceAnimations[piece.id];
+          if (!coords) return null;
+          const owner = room.state.players.get(piece.ownerSessionId);
+          return (
+            <div
+              key={piece.id}
+              className={styles.stack}
+              style={{
+                left: `${coords.x}%`,
+                top: `${coords.y}%`,
+                transition: `left ${HOP_MS}ms linear, top ${HOP_MS}ms linear`,
+              }}
+            >
+              <div className={styles.stackItem} style={{ "--i": 0 } as CSSProperties}>
+                <PieceToken character={piece.character} team={owner?.team ?? ""} size="board" />
+              </div>
             </div>
           );
         })}
