@@ -41,11 +41,18 @@ function shortcutOutCoords(step: 1 | 2): Coords {
   return lerp(CENTER, CORNERS[0], step / 3);
 }
 
+/** 5번에서 지름길을 타고 중앙을 건너 15번 쪽으로 가는 구간 — shortcutInCoords(15, step)와 물리적으로
+ * 같은 두 칸을 가리키므로(방향만 반대) 같은 corner를 향해 보간한다. */
+function shortcutCrossCoords(step: 1 | 2): Coords {
+  return lerp(CENTER, CORNERS[JUNCTION_CORNER[15]], step / 3);
+}
+
 export function positionToCoords(kind: PositionKind, index: number): Coords | null {
   switch (kind) {
     case "outer":
       return outerCoords(index);
     case "center":
+    case "centerCross":
       return CENTER;
     case "shortcutIn5":
       return shortcutInCoords(5, index as 1 | 2);
@@ -55,6 +62,8 @@ export function positionToCoords(kind: PositionKind, index: number): Coords | nu
       return shortcutInCoords(15, index as 1 | 2);
     case "shortcutOut":
       return shortcutOutCoords(index as 1 | 2);
+    case "shortcutCross":
+      return shortcutCrossCoords(index as 1 | 2);
     case "start":
     case "finished":
       return null;

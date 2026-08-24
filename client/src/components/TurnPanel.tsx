@@ -34,9 +34,12 @@ function positionDescription(piece: PieceState): string {
     case "shortcutIn15":
       return `15번 지름길 ${piece.positionIndex}칸`;
     case "center":
+    case "centerCross":
       return "중앙";
     case "shortcutOut":
       return `중앙 통과 ${piece.positionIndex}칸`;
+    case "shortcutCross":
+      return `15번 방향 ${piece.positionIndex}칸`;
     case "finished":
       return "완주";
   }

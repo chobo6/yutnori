@@ -16,6 +16,7 @@ export interface SimplePosition {
   index: number;
 }
 
+/** "finish" 트랙(10번/15번 진입, server의 shortcutPositionFromAbsolute와 대응) 한 칸 전진. */
 function shortcutFromAbsolute(junctionKind: PositionKind, absoluteStep: number): SimplePosition {
   if (absoluteStep <= 2) return { kind: junctionKind, index: absoluteStep };
   if (absoluteStep === 3) return { kind: "center", index: -1 };
@@ -23,7 +24,17 @@ function shortcutFromAbsolute(junctionKind: PositionKind, absoluteStep: number):
   return { kind: "finished", index: -1 };
 }
 
-/** pos에서 한 칸 전진한 위치를 계산한다. junctionKind는 지름길에 이미 올라탄 상태를 이어가기 위한 컨텍스트. */
+/** "cross" 트랙(5번 진입 전용, server의 crossPositionFromAbsolute와 대응) 한 칸 전진.
+ * stepForwardOnce가 항상 딱 1칸씩만 계산하므로(아래 computeMovePath의 for 루프 참고),
+ * absoluteStep은 여기서 최대 6까지만 나온다 — 6을 넘는 오버플로는 그 다음 호출에서
+ * "outer" 케이스(기존 일반 전진 로직)가 알아서 이어받는다. */
+function crossFromAbsolute(absoluteStep: number): SimplePosition {
+  if (absoluteStep <= 2) return { kind: "shortcutIn5", index: absoluteStep };
+  if (absoluteStep === 3) return { kind: "centerCross", index: -1 };
+  if (absoluteStep <= 5) return { kind: "shortcutCross", index: absoluteStep - 3 };
+  return { kind: "outer", index: 15 };
+}
+
 function stepForwardOnce(
   pos: SimplePosition,
   useShortcut: boolean,
@@ -35,10 +46,20 @@ function stepForwardOnce(
   }
   if (pos.kind === "shortcutIn5" || pos.kind === "shortcutIn10" || pos.kind === "shortcutIn15") {
     const absoluteStep = pos.index + 1;
+    if (pos.kind === "shortcutIn5") {
+      return { pos: crossFromAbsolute(absoluteStep), junctionKind: pos.kind };
+    }
     return { pos: shortcutFromAbsolute(pos.kind, absoluteStep), junctionKind: pos.kind };
+  }
+  if (pos.kind === "centerCross") {
+    return { pos: crossFromAbsolute(4), junctionKind };
   }
   if (pos.kind === "center") {
     return { pos: shortcutFromAbsolute(junctionKind ?? "shortcutIn5", 4), junctionKind };
+  }
+  if (pos.kind === "shortcutCross") {
+    const absoluteStep = 3 + pos.index + 1;
+    return { pos: crossFromAbsolute(absoluteStep), junctionKind };
   }
   if (pos.kind === "shortcutOut") {
     const absoluteStep = 3 + pos.index + 1;

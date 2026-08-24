@@ -5,7 +5,9 @@ export type PositionKind =
   | "shortcutIn10"
   | "shortcutIn15"
   | "center"
+  | "centerCross"
   | "shortcutOut"
+  | "shortcutCross"
   | "finished";
 
 export interface PlayerState {
