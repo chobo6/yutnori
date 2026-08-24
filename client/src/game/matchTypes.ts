@@ -31,6 +31,8 @@ export interface PieceState {
 export interface PendingResultState {
   id: string;
   result: string;
+  /** 이 패를 쓸 수 있는 말 id 목록 — 비어 있으면 누구나 쓸 수 있다(server/src/rooms/MatchState.ts와 동일). */
+  restrictedToPieceIds: string[];
 }
 
 export interface MatchState {
@@ -51,7 +53,11 @@ export interface MatchState {
 export const CHARACTERS = ["교주", "성직", "마담", "의사"] as const;
 export type CharacterId = (typeof CHARACTERS)[number];
 
-// server/src/game/gauge.ts의 YutResult와 동일한 6개 코드.
+// server/src/game/gauge.ts의 GYOJU_BONUS_RESULT와 동일 — 모서리에서 발동한 교주 보너스가
+// 즉시 적용되지 않고 지름길 선택을 기다리는 합성 대기 패의 result 코드.
+export const GYOJU_BONUS_RESULT = "gyojuBonus";
+
+// server/src/game/gauge.ts의 YutResult(6개) + GYOJU_BONUS_RESULT와 동일한 라벨.
 export const YUT_RESULT_LABELS: Record<string, string> = {
   backDo: "빽도",
   do: "도",
@@ -59,6 +65,7 @@ export const YUT_RESULT_LABELS: Record<string, string> = {
   geol: "걸",
   yut: "윷",
   mo: "모",
+  [GYOJU_BONUS_RESULT]: "교주 보너스",
 };
 
 // server/src/game/gauge.ts의 YUT_STEPS와 동일 — 이동 가능 칸(도착지) 미리보기 계산에 필요.
@@ -69,6 +76,7 @@ export const YUT_STEPS: Record<string, number> = {
   geol: 3,
   yut: 4,
   mo: 5,
+  [GYOJU_BONUS_RESULT]: 1,
 };
 
 // server/src/game/position.ts의 SHORTCUT_JUNCTIONS(5, 10, 15)와 동일.

@@ -24,8 +24,11 @@ export class PieceSchema extends Schema {
 export class PendingResultSchema extends Schema {
   /** 서버 발급 안정 id — 같은 결과(예: "개")가 중복 쌓여도 클라이언트가 특정 항목을 지정할 수 있게 함. */
   @type("string") id: string = "";
-  /** YutResult 코드("mo"|"yut"|"geol"|"gae"|"do"|"backDo"). */
+  /** YutResult 코드("mo"|"yut"|"geol"|"gae"|"do"|"backDo") 또는 합성 패 코드("gyojuBonus"). */
   @type("string") result: string = "";
+  /** 이 패를 쓸 수 있는 말 id 목록 — 비어 있으면(기본) 누구나 쓸 수 있다. 교주 보너스가 모서리에서
+   * 발동해 지름길 선택이 필요할 때처럼, 특정 말(그룹)에만 허용해야 하는 합성 대기 패에 쓴다. */
+  @type(["string"]) restrictedToPieceIds = new ArraySchema<string>();
 }
 
 export class MatchState extends Schema {

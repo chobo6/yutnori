@@ -1,8 +1,15 @@
 import { Room, Client } from "colyseus";
 import { applyMove, samePosition, type Piece } from "../game/pieces";
-import type { Position } from "../game/position";
+import { SHORTCUT_JUNCTIONS, type Position } from "../game/position";
 import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
-import { DEFAULT_GAUGE_CYCLE_MS, GRANTS_EXTRA_THROW, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
+import {
+  DEFAULT_GAUGE_CYCLE_MS,
+  GRANTS_EXTRA_THROW,
+  GYOJU_BONUS_RESULT,
+  resolveThrow,
+  YUT_STEPS,
+  type YutResult,
+} from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
 import { sanitizeNickname } from "../game/nickname";
 import { sanitizeRoomTitle } from "../game/roomTitle";
@@ -283,13 +290,20 @@ export class MatchRoom extends Room<MatchState> {
     this.resolveThrowFor(sessionId, result);
   }
 
-  /** 말 선택 제한시간 초과 — 가장 오래 쌓인 패로, 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다. */
+  /**
+   * 말 선택 제한시간 초과 — 가장 오래 쌓인 패로, 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다.
+   * 가장 오래 쌓인 패가 특정 말(그룹)에만 허용된 패(예: 교주 보너스)라면 아무 말이나 골라선 안
+   * 되고 그 목록 안에서 골라야 한다 — 아니면 performMove가 조용히 거부해서 턴이 멈춰버린다.
+   */
   private autoMove(sessionId: string) {
     if (!this.isCurrentTurn(sessionId)) return;
-    const target = this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
-    if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
     const oldestPending = this.state.pendingResults[0];
     if (!oldestPending) return; // 이론상 도달 불가 — resolved 상태는 항상 pendingResults가 있어야 진입한다.
+    const target =
+      oldestPending.restrictedToPieceIds.length > 0
+        ? this.state.pieces.find((p) => oldestPending.restrictedToPieceIds.includes(p.id))
+        : this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+    if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
     this.performMove(sessionId, target.id, oldestPending.id, false);
   }
 
@@ -298,7 +312,12 @@ export class MatchRoom extends Room<MatchState> {
     if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase !== "resolved") return;
     const pendingIndex = this.state.pendingResults.findIndex((p) => p.id === resultId);
     if (pendingIndex === -1) return;
-    const result = this.state.pendingResults[pendingIndex].result as YutResult;
+    const pending = this.state.pendingResults[pendingIndex];
+    // restrictedToPieceIds가 있는 패(예: 모서리에서 발동한 교주 보너스)는 그 목록 안의 말에만
+    // 쓸 수 있다 — 아무 말이나 골라서 남의 보너스를 가로채면 안 된다.
+    if (pending.restrictedToPieceIds.length > 0 && !pending.restrictedToPieceIds.includes(pieceId)) return;
+    // 실제 윷 던지기 결과(YutResult) 또는 합성 패(GYOJU_BONUS_RESULT) 둘 다 올 수 있어 string으로 둔다.
+    const result = pending.result;
 
     const targetPiece = this.state.pieces.find((p) => p.id === pieceId);
     if (!targetPiece || targetPiece.ownerSessionId !== sessionId) return;
@@ -323,27 +342,6 @@ export class MatchRoom extends Room<MatchState> {
       moverAfterMove.position,
     );
 
-    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1 — "도착한 위치의 아군 말에 업혔을 경우") — applyMove가
-    // 반환한 piggybackedIds는 "출발 칸" 기준(함께 움직인 말들만)이라 이 능력엔 그대로 못 쓴다.
-    // 이동한 말이 "도착한" 칸에 이미 아군 말이 있어서(그 아군은 이번 이동으로 움직이지 않고
-    // 제자리에 있다가 지금 막 업힌 경우) 업힌 상태가 된 경우도 발동해야 하므로, 이동이 끝난 뒤
-    // (afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을 다시 계산한다 — "출발 칸부터
-    // 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 이렇게 하면 자연스럽게 잡힌다. 그룹 안에
-    // 교주가 하나라도 있으면 80% 확률로 그룹 전원이 1칸 더 전진한다. 이 보너스 전진이 새로 만든
-    // 잡힘도 아래 resolveCaptureResponses에 함께 넘긴다(원래 이동의 잡힘 다음 순서로).
-    const groupAfterMove = afterMove
-      .filter(
-        (p) => p.id !== pieceId && p.ownerId === moverAfterMove.ownerId && samePosition(p.position, moverAfterMove.position),
-      )
-      .map((p) => p.id);
-    const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, this.rng);
-    if (bonus.fired && bonus.triggeredBy) {
-      this.broadcastAbility(bonus.triggeredBy, "교주");
-      const moverAfterBonus = bonus.pieces.find((p) => p.id === pieceId)!;
-      this.broadcastPieceMoved([pieceId, ...groupAfterMove], 1, false, moverAfterMove.position, moverAfterBonus.position);
-    }
-    if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
-
     const mainCaptureRecords: CaptureRecord[] = capturedPieceIds.map((id) => {
       const original = pieces.find((p) => p.id === id)!;
       return {
@@ -353,18 +351,57 @@ export class MatchRoom extends Room<MatchState> {
         originalPreviousPosition: original.previousPosition,
       };
     });
-    const bonusCaptureRecords: CaptureRecord[] = bonus.capturedPieceIds.map((id) => {
-      const original = afterMove.find((p) => p.id === id)!;
-      return {
-        pieceId: id,
-        teamId: original.teamId,
-        originalPosition: original.position,
-        originalPreviousPosition: original.previousPosition,
-      };
-    });
+
+    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1 — "도착한 위치의 아군 말에 업혔을 경우") — applyMove가
+    // 반환한 piggybackedIds는 "출발 칸" 기준(함께 움직인 말들만)이라 이 능력엔 그대로 못 쓴다.
+    // 이동한 말이 "도착한" 칸에 이미 아군 말이 있어서(그 아군은 이번 이동으로 움직이지 않고
+    // 제자리에 있다가 지금 막 업힌 경우) 업힌 상태가 된 경우도 발동해야 하므로, 이동이 끝난 뒤
+    // (afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을 다시 계산한다 — "출발 칸부터
+    // 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 이렇게 하면 자연스럽게 잡힌다. 그룹 안에
+    // 교주가 하나라도 있으면 80% 확률로 그룹 전원이 1칸 더 전진한다. result가 이미 교주 보너스
+    // 자체(GYOJU_BONUS_RESULT)라면 이 블록 전체를 건너뛴다 — 보너스 전진이 또 다른 보너스
+    // 발동을 만들지 않는다는 스펙(§3.1 "연쇄 방지")을 지키는 가드다.
+    let piecesAfterBonus = afterMove;
+    let bonusCaptureRecords: CaptureRecord[] = [];
+    if (result !== GYOJU_BONUS_RESULT) {
+      const groupAfterMove = afterMove
+        .filter(
+          (p) => p.id !== pieceId && p.ownerId === moverAfterMove.ownerId && samePosition(p.position, moverAfterMove.position),
+        )
+        .map((p) => p.id);
+      const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, this.rng);
+      if (bonus.fired && bonus.triggeredBy) {
+        this.broadcastAbility(bonus.triggeredBy, "교주");
+        const atJunction =
+          moverAfterMove.position.kind === "outer" && SHORTCUT_JUNCTIONS.has(moverAfterMove.position.index);
+        if (atJunction) {
+          // 모서리에서 발동했으면 즉시 적용하지 않고, 지름길 사용 여부를 직접 고를 수 있는
+          // 대기 패로 쌓아둔다 — 일반 던지기 이동과 같은 파란 점 선택 UI를 그대로 재사용한다.
+          const pendingBonus = new PendingResultSchema();
+          pendingBonus.id = `p${++this.pendingResultCounter}`;
+          pendingBonus.result = GYOJU_BONUS_RESULT;
+          for (const id of [pieceId, ...groupAfterMove]) pendingBonus.restrictedToPieceIds.push(id);
+          this.state.pendingResults.push(pendingBonus);
+        } else {
+          const moverAfterBonus = bonus.pieces.find((p) => p.id === pieceId)!;
+          this.broadcastPieceMoved([pieceId, ...groupAfterMove], 1, false, moverAfterMove.position, moverAfterBonus.position);
+          piecesAfterBonus = bonus.pieces;
+          bonusCaptureRecords = bonus.capturedPieceIds.map((id) => {
+            const original = afterMove.find((p) => p.id === id)!;
+            return {
+              pieceId: id,
+              teamId: original.teamId,
+              originalPosition: original.position,
+              originalPreviousPosition: original.previousPosition,
+            };
+          });
+        }
+      }
+      if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
+    }
 
     const { pieces: updated, negatedPieceIds, effects } = resolveCaptureResponses(
-      bonus.pieces,
+      piecesAfterBonus,
       [...mainCaptureRecords, ...bonusCaptureRecords],
       this.rng,
     );

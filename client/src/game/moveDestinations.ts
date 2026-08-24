@@ -1,4 +1,4 @@
-import { positionToCoords, type Coords } from "./boardCoords";
+import { CORNERS, positionToCoords, type Coords } from "./boardCoords";
 import { SHORTCUT_JUNCTION_INDICES, YUT_STEPS, type PendingResultState, type PieceState } from "./matchTypes";
 import { computeMovePath } from "./movePath";
 
@@ -23,6 +23,9 @@ export function computeMoveDestinations(
   const atJunction = piece.positionKind === "outer" && SHORTCUT_JUNCTION_INDICES.has(piece.positionIndex);
 
   for (const result of pendingResults) {
+    // 특정 말(그룹)에만 허용된 패(예: 모서리에서 발동한 교주 보너스)는 그 목록에 없는 말로는
+    // 계산 자체를 하지 않는다 — 서버가 어차피 거부할 도착지를 파란 점으로 보여주면 안 된다.
+    if (result.restrictedToPieceIds.length > 0 && !result.restrictedToPieceIds.includes(piece.id)) continue;
     const steps = YUT_STEPS[result.result];
     if (steps === undefined) continue;
 
@@ -37,7 +40,10 @@ export function computeMoveDestinations(
       const path = computeMovePath({ kind: piece.positionKind, index: piece.positionIndex }, steps, useShortcut);
       const last = path[path.length - 1];
       if (!last) continue;
-      const coords = positionToCoords(last.kind, last.index);
+      // "finished"(완주)는 보드 밖이라 positionToCoords가 null을 준다 — 그렇다고 이 도착지를
+      // 그냥 건너뛰면 완주로 이어지는 이동은 찍을 점 자체가 없어 선택할 방법이 사라진다.
+      // 출발/도착 모서리(CORNERS[0]) 자리에 점을 띄워 "여기를 누르면 완주"로 쓸 수 있게 한다.
+      const coords = last.kind === "finished" ? CORNERS[0] : positionToCoords(last.kind, last.index);
       if (coords) destinations.push({ resultId: result.id, useShortcut, coords });
     }
   }

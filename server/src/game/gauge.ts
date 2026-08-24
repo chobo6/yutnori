@@ -1,12 +1,18 @@
 export type YutResult = "backDo" | "do" | "gae" | "geol" | "yut" | "mo";
 
-export const YUT_STEPS: Record<YutResult, number> = {
+/** 교주 보너스 전진(§3.1)이 모서리에서 발동해 지름길 선택이 필요할 때 쌓는 합성 대기 패의
+ * result 코드 — 실제 윷 던지기 결과가 아니지만, MatchRoom.performMove가 모든 대기 패를
+ * YUT_STEPS로 동일하게 처리하므로 같은 테이블에 둔다. */
+export const GYOJU_BONUS_RESULT = "gyojuBonus";
+
+export const YUT_STEPS: Record<string, number> = {
   backDo: -1,
   do: 1,
   gae: 2,
   geol: 3,
   yut: 4,
   mo: 5,
+  [GYOJU_BONUS_RESULT]: 1,
 };
 
 export const GRANTS_EXTRA_THROW: ReadonlySet<YutResult> = new Set(["yut", "mo"]);

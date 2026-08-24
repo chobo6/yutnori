@@ -63,7 +63,6 @@ export function TurnPanel({
         <div>
           <YutSticks result={room.state.lastThrowResult || null} />
           <p>결과: {pendingResults.map((r) => YUT_RESULT_LABELS[r.result] ?? r.result).join(", ")}</p>
-          <p>이동할 말을 선택하세요 — 도착 가능한 칸이 파란 점으로 표시됩니다</p>
         </div>
       )}
     </div>
