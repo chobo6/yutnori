@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Room } from "colyseus.js";
-import type { MatchState } from "./matchTypes";
+import type { MatchState, PositionKind } from "./matchTypes";
 import { positionToCoords, type Coords } from "./boardCoords";
 import { computeMovePath } from "./movePath";
 
@@ -13,6 +13,15 @@ interface PieceMovedMessage {
   pieceIds: string[];
   steps: number;
   useShortcut: boolean;
+  /** 이동 시작/도착 위치를 서버가 메시지에 직접 실어 보낸다 — room.state.pieces를 읽지 않는다.
+   * raw broadcast(이 메시지)가 같은 이동을 반영하는 상태 패치보다 먼저 도착하는 경우가 있어서,
+   * previousPosition 같은 상태 필드를 읽으면 아직 패치되지 않은 "그 이전 이동 전" 값을 잘못
+   * 읽을 수 있기 때문이다(이미 나온 말이 다시 움직일 때 매번 출발점에서 움직이는 것처럼 보이던
+   * 버그의 원인 — server/src/rooms/MatchRoom.ts의 broadcastPieceMoved 주석 참고). */
+  fromKind: PositionKind;
+  fromIndex: number;
+  toKind: PositionKind;
+  toIndex: number;
 }
 
 /**
@@ -27,63 +36,57 @@ export function usePieceAnimations(room: Room<MatchState>): Record<string, Coord
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    const unsubscribe = room.onMessage<PieceMovedMessage>("pieceMoved", ({ pieceIds, steps, useShortcut }) => {
-      for (const pieceId of pieceIds) {
-        const piece = room.state.pieces.find((p) => p.id === pieceId);
-        if (!piece) continue;
-
-        const fromCoords = positionToCoords(piece.previousPositionKind, piece.previousPositionIndex);
+    const unsubscribe = room.onMessage<PieceMovedMessage>(
+      "pieceMoved",
+      ({ pieceIds, steps, useShortcut, fromKind, fromIndex, toKind, toIndex }) => {
+        const fromCoords = positionToCoords(fromKind, fromIndex);
 
         const path =
           steps < 0
-            ? // 빽도 — 중간 칸 없이 단일 홉으로 previousPosition에서 최종 위치로 직행
-              [positionToCoords(piece.positionKind, piece.positionIndex)].filter((c): c is Coords => c !== null)
-            : computeMovePath(
-                { kind: piece.previousPositionKind, index: piece.previousPositionIndex },
-                steps,
-                useShortcut,
-              )
+            ? // 빽도 — 중간 칸 없이 단일 홉으로 from에서 to(최종 위치)로 직행
+              [positionToCoords(toKind, toIndex)].filter((c): c is Coords => c !== null)
+            : computeMovePath({ kind: fromKind, index: fromIndex }, steps, useShortcut)
                 .map((p) => positionToCoords(p.kind, p.index))
                 .filter((c): c is Coords => c !== null);
-        if (path.length === 0) continue; // 도착 좌표조차 없는 경우(예: 빽도로 다시 start行)는 스냅
+        if (path.length === 0) return;
 
-        // 출발(start)처럼 보드 위 좌표가 없는 위치에서 나가는 이동은 "어디서 왔는지" 보여줄
-        // 좌표가 아예 없다 — 그 첫 홉만 트랜지션 없이 즉시 그 자리에 나타나는 것으로 처리하고
-        // (막 대기 칸에서 등장하는 자연스러운 연출), 이후 홉부터는 정상적으로 애니메이션한다.
-        // 예전에는 이 경우 전체를 건너뛰어(continue) 대기 중이던 말의 첫 이동(걸/개/윷/모처럼
-        // 2칸 이상)이 통째로 순간이동해버렸다.
-        const initialCoords = fromCoords ?? path[0];
-        const remainingPath = fromCoords ? path : path.slice(1);
+        for (const pieceId of pieceIds) {
+          // 출발(start)처럼 보드 위 좌표가 없는 위치에서 나가는 이동은 "어디서 왔는지" 보여줄
+          // 좌표가 아예 없다 — 그 첫 홉만 트랜지션 없이 즉시 그 자리에 나타나는 것으로 처리하고
+          // (막 대기 칸에서 등장하는 자연스러운 연출), 이후 홉부터는 정상적으로 애니메이션한다.
+          const initialCoords = fromCoords ?? path[0];
+          const remainingPath = fromCoords ? path : path.slice(1);
 
-        setOverrides((prev) => ({ ...prev, [pieceId]: initialCoords }));
+          setOverrides((prev) => ({ ...prev, [pieceId]: initialCoords }));
 
-        function scheduleClear() {
-          const clearTimer = setTimeout(() => {
-            setOverrides((prev) => {
-              const next = { ...prev };
-              delete next[pieceId];
-              return next;
+          function scheduleClear() {
+            const clearTimer = setTimeout(() => {
+              setOverrides((prev) => {
+                const next = { ...prev };
+                delete next[pieceId];
+                return next;
+              });
+            }, HOP_MS);
+            timers.push(clearTimer);
+          }
+
+          if (remainingPath.length === 0) {
+            scheduleClear();
+          } else {
+            remainingPath.forEach((coords, i) => {
+              const timer = setTimeout(
+                () => {
+                  setOverrides((prev) => ({ ...prev, [pieceId]: coords }));
+                  if (i === remainingPath.length - 1) scheduleClear();
+                },
+                (i + 1) * HOP_MS,
+              );
+              timers.push(timer);
             });
-          }, HOP_MS);
-          timers.push(clearTimer);
+          }
         }
-
-        if (remainingPath.length === 0) {
-          scheduleClear();
-        } else {
-          remainingPath.forEach((coords, i) => {
-            const timer = setTimeout(
-              () => {
-                setOverrides((prev) => ({ ...prev, [pieceId]: coords }));
-                if (i === remainingPath.length - 1) scheduleClear();
-              },
-              (i + 1) * HOP_MS,
-            );
-            timers.push(timer);
-          });
-        }
-      }
-    });
+      },
+    );
 
     return () => {
       unsubscribe();

@@ -1,5 +1,6 @@
 import { Room, Client } from "colyseus";
 import { applyMove, type Piece } from "../game/pieces";
+import type { Position } from "../game/position";
 import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
 import { DEFAULT_GAUGE_CYCLE_MS, GRANTS_EXTRA_THROW, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
@@ -157,13 +158,29 @@ export class MatchRoom extends Room<MatchState> {
 
   /**
    * 말 이동(원래 이동 또는 교주 보너스 전진)이 있을 때마다 브로드캐스트 — 상태에는 저장하지
-   * 않는다(채팅/능력 말풍선과 같은 패턴). 클라이언트는 각 말의 previousPosition(이미 상태에
-   * 있음)을 시작점 삼아 steps/useShortcut으로 중간 칸들을 직접 계산해 한 칸씩 이동하는
-   * 애니메이션을 재생한다 — position.ts의 이동 로직을 클라이언트에서 그대로 미러링한다
-   * (matchTypes.ts와 동일한 이 프로젝트의 확립된 관례).
+   * 않는다(채팅/능력 말풍선과 같은 패턴). from/to를 메시지에 직접 담아 보낸다 — 예전에는
+   * 클라이언트가 room.state.pieces의 previousPosition을 시작점으로 읽었는데, 이 raw
+   * broadcast가 상태 패치(같은 이동을 반영하는 스키마 변경)보다 먼저 도착하는 경우가 있어
+   * (raw broadcast는 즉시 전송되지만 스키마 패치는 별도 주기로 배치 전송됨), 메시지 도착
+   * 시점엔 아직 "이번 이동 전" 값으로 패치되지 않은 채 "그 이전 이동 전" 값(previousPosition)이
+   * 남아있는 경우가 있었다 — 이미 나온 말이 다시 움직일 때 매번 출발점(start)에서 움직이는
+   * 것처럼 보이던 버그의 원인. from/to를 메시지 자체에 실어 보내면 상태 패치 타이밍과 무관하게
+   * 항상 정확하다. 클라이언트는 from에서 steps/useShortcut으로 중간 칸들을 직접 계산해
+   * 한 칸씩 이동하는 애니메이션을 재생한다(position.ts를 그대로 미러링, matchTypes.ts와
+   * 동일한 이 프로젝트의 확립된 관례) — 빽도(steps<0)일 때는 중간 경로 없이 to로 직행한다.
    */
-  private broadcastPieceMoved(pieceIds: string[], steps: number, useShortcut: boolean) {
-    this.broadcast("pieceMoved", { pieceIds, steps, useShortcut });
+  private broadcastPieceMoved(pieceIds: string[], steps: number, useShortcut: boolean, from: Position, to: Position) {
+    const fromSchema = toSchemaPosition(from);
+    const toSchema = toSchemaPosition(to);
+    this.broadcast("pieceMoved", {
+      pieceIds,
+      steps,
+      useShortcut,
+      fromKind: fromSchema.kind,
+      fromIndex: fromSchema.index,
+      toKind: toSchema.kind,
+      toIndex: toSchema.index,
+    });
   }
 
   private isCurrentTurn(sessionId: string): boolean {
@@ -290,13 +307,21 @@ export class MatchRoom extends Room<MatchState> {
 
     const pieces: Piece[] = this.toGamePieces();
 
+    const mover = pieces.find((p) => p.id === pieceId)!;
     const { pieces: afterMove, capturedPieceIds, piggybackedIds } = applyMove(
       pieces,
       pieceId,
       YUT_STEPS[result],
       useShortcut,
     );
-    this.broadcastPieceMoved([pieceId, ...piggybackedIds], YUT_STEPS[result], useShortcut);
+    const moverAfterMove = afterMove.find((p) => p.id === pieceId)!;
+    this.broadcastPieceMoved(
+      [pieceId, ...piggybackedIds],
+      YUT_STEPS[result],
+      useShortcut,
+      mover.position,
+      moverAfterMove.position,
+    );
 
     // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1, 2026-08-24 조건 확장) — 이번 이동으로 실제로
     // 자리를 옮긴 말들(이동한 말 + 업힌 말들) 중 교주가 하나라도 있으면 80% 확률로 그룹 전원이
@@ -305,7 +330,8 @@ export class MatchRoom extends Room<MatchState> {
     const bonus = applyGyojuBonus(afterMove, pieceId, piggybackedIds, this.rng);
     if (bonus.fired && bonus.triggeredBy) {
       this.broadcastAbility(bonus.triggeredBy, "교주");
-      this.broadcastPieceMoved([pieceId, ...piggybackedIds], 1, false);
+      const moverAfterBonus = bonus.pieces.find((p) => p.id === pieceId)!;
+      this.broadcastPieceMoved([pieceId, ...piggybackedIds], 1, false, moverAfterMove.position, moverAfterBonus.position);
     }
     if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
 

@@ -233,17 +233,23 @@ describe("MatchRoom", () => {
     expect(room.state.lastThrowResult).toBe("");
   });
 
-  it("말이 이동하면 pieceMoved가 이동한 말들 + steps/useShortcut으로 브로드캐스트된다(이동 애니메이션용)", async () => {
+  it("말이 이동하면 pieceMoved가 이동한 말들 + steps/useShortcut/from/to로 브로드캐스트된다(이동 애니메이션용)", async () => {
     const { room, clients } = await setupFourPlayers(colyseus);
     const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
     const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
     const myPiece = room.state.pieces.find((p) => p.ownerSessionId === currentTurnSessionId)!;
 
-    const received: Array<{ pieceIds: string[]; steps: number; useShortcut: boolean }> = [];
-    turnClient.onMessage(
-      "pieceMoved",
-      (msg: { pieceIds: string[]; steps: number; useShortcut: boolean }) => received.push(msg),
-    );
+    type PieceMovedMsg = {
+      pieceIds: string[];
+      steps: number;
+      useShortcut: boolean;
+      fromKind: string;
+      fromIndex: number;
+      toKind: string;
+      toIndex: number;
+    };
+    const received: PieceMovedMsg[] = [];
+    turnClient.onMessage("pieceMoved", (msg: PieceMovedMsg) => received.push(msg));
 
     turnClient.send("throwStart", {});
     await flush(GAE_ELAPSED_MS); // "개"(2칸)
@@ -253,7 +259,18 @@ describe("MatchRoom", () => {
     turnClient.send("movePiece", { pieceId: myPiece.id, resultId, useShortcut: false });
     await flush();
 
-    expect(received).toEqual([{ pieceIds: [myPiece.id], steps: 2, useShortcut: false }]);
+    // myPiece는 새 게임에서 항상 start에서 시작하므로, 2칸 이동하면 outer(2)에 도착한다.
+    expect(received).toEqual([
+      {
+        pieceIds: [myPiece.id],
+        steps: 2,
+        useShortcut: false,
+        fromKind: "start",
+        fromIndex: -1,
+        toKind: "outer",
+        toIndex: 2,
+      },
+    ]);
   });
 
   it("이미 완주한 말을 이동시키려 해도 방이 죽지 않고 말도 그대로다", async () => {

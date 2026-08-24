@@ -67,7 +67,7 @@ export function YutSticks({ result }: { result: string | null }) {
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
         wireframes: false,
-        background: "#e8ddc7",
+        background: "transparent",
       },
     });
 
