@@ -437,4 +437,117 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(room.state.gaugePhase).toBe("idle");
     expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(moverSessionId);
   });
+
+  // 능력 발동 UI(말풍선)는 상태(MatchState)가 아니라 chatMessage와 같은 방식의 순수
+  // 브로드캐스트("abilityTriggered")로 전달된다 — 여기서는 그 브로드캐스트가 실제로
+  // 나가는지, pieceId/character가 올바른지만 검증한다.
+
+  it("교주 능력이 발동하면 abilityTriggered가 이동한 말의 pieceId로 브로드캐스트된다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 },
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    placeAt(room, `${sessionId}-0`, 3);
+    placeAt(room, `${sessionId}-1`, 3);
+
+    const received: Array<{ pieceId: string; character: string }> = [];
+    moverClient.onMessage("abilityTriggered", (msg: { pieceId: string; character: string }) => received.push(msg));
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    expect(received).toEqual([{ pieceId: `${sessionId}-0`, character: "교주" }]);
+  });
+
+  it("의사가 잡기를 무효화하면 abilityTriggered가 구조된(원위치 복원된) 말의 pieceId로 브로드캐스트된다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"],
+        ["성직", "의사"],
+        ["의사", "성직"],
+        ["의사", "성직"],
+      ],
+      { rng: () => 0 },
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`;
+    const uisaId = `${clients[2].sessionId}-0`;
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8);
+    placeAt(room, uisaId, 7);
+
+    const received: Array<{ pieceId: string; character: string }> = [];
+    moverClient.onMessage("abilityTriggered", (msg: { pieceId: string; character: string }) => received.push(msg));
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    expect(received).toEqual([{ pieceId: victimId, character: "의사" }]);
+  });
+
+  it("마담이 저지하면 abilityTriggered가 그 마담의 pieceId로 브로드캐스트된다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 }, // 저지가 없다면 반드시 성공할 값
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const enemyMadamId = `${clients[2].sessionId}-0`; // clients[2]는 항상 팀B, 캐릭터 "마담"
+    placeAt(room, `${sessionId}-0`, 3);
+    placeAt(room, `${sessionId}-1`, 3);
+    placeAt(room, enemyMadamId, 7); // 도착 칸(8)과 같은 줄(B)
+
+    const received: Array<{ pieceId: string; character: string }> = [];
+    moverClient.onMessage("abilityTriggered", (msg: { pieceId: string; character: string }) => received.push(msg));
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    expect(received).toEqual([{ pieceId: enemyMadamId, character: "마담" }]);
+  });
 });

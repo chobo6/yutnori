@@ -101,6 +101,37 @@ describe("applyGyojuBonus", () => {
     expect(result.pieces).toEqual(pieces);
     expect(result.capturedPieceIds).toEqual([]);
   });
+
+  it("발동에 성공하면 fired가 true다(UI 알림용)", () => {
+    const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(true);
+    expect(result.blockedBy).toBeNull();
+  });
+
+  it("80% 확률에 실패하면 fired가 false다", () => {
+    const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_FAIL);
+    expect(result.fired).toBe(false);
+  });
+
+  it("자격 자체가 안 되면(업힌 말 없음) fired가 false다", () => {
+    const pieces = [piece("p1", "alice", "A", "교주", 8)];
+    const result = applyGyojuBonus(pieces, "p1", [], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(false);
+    expect(result.blockedBy).toBeNull();
+  });
+
+  it("마담에게 저지되면 fired는 false, blockedBy에 그 마담의 id가 담긴다", () => {
+    const pieces = [
+      piece("p1", "alice", "A", "교주", 8),
+      piece("p2", "alice", "A", "성직", 8),
+      piece("enemy-madam", "bob", "B", "마담", 7),
+    ];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(false);
+    expect(result.blockedBy).toBe("enemy-madam");
+  });
 });
 
 describe("resolveCaptureResponses", () => {
@@ -241,6 +272,69 @@ describe("resolveCaptureResponses", () => {
     const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "start" });
+  });
+});
+
+describe("resolveCaptureResponses의 effects (UI 알림용 발동 내역)", () => {
+  function capture(pieceId: string, teamId: string, index: number): CaptureRecord {
+    return { pieceId, teamId, originalPosition: { kind: "outer", index }, originalPreviousPosition: { kind: "start" } };
+  }
+
+  it("의사가 성공하면 그 캡처의 effect에 negated:true가 담긴다", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "성직", 0),
+      piece("uisa", "bob", "B", "의사", 7),
+    ];
+    pieces[0].position = { kind: "start" };
+    const { effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    expect(effects).toEqual([{ pieceId: "victim", negated: true, redirectedTo: null, blockedBy: null }]);
+  });
+
+  it("성직이 성공하면 그 캡처의 effect에 redirectedTo로 성직 pieceId가 담긴다", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 12), // 다른 줄 — 의사 제외
+      piece("seongjik", "bob", "B", "성직", 15),
+    ];
+    pieces[0].position = { kind: "start" };
+    const { effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    expect(effects).toEqual([{ pieceId: "victim", negated: false, redirectedTo: "seongjik", blockedBy: null }]);
+  });
+
+  it("마담이 저지하면 blockedBy에 그 마담의 pieceId가 담긴다", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 7),
+      piece("enemy-madam", "alice", "A", "마담", 9),
+    ];
+    pieces[0].position = { kind: "start" };
+    const { effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    expect(effects).toEqual([{ pieceId: "victim", negated: false, redirectedTo: null, blockedBy: "enemy-madam" }]);
+  });
+
+  it("아무도 반응하지 않으면(후보 없음) effect 전부 null/false다", () => {
+    const pieces = [piece("victim", "bob", "B", "마담", 0)];
+    pieces[0].position = { kind: "start" };
+    const { effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    expect(effects).toEqual([{ pieceId: "victim", negated: false, redirectedTo: null, blockedBy: null }]);
+  });
+
+  it("캡처가 여러 건이면 effects도 같은 순서로 여러 건 담긴다", () => {
+    const pieces = [
+      piece("victim1", "bob", "B", "마담", 0),
+      piece("victim2", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 7),
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    const { effects } = resolveCaptureResponses(
+      pieces,
+      [capture("victim1", "B", 8), capture("victim2", "B", 8)],
+      ALWAYS_SUCCEED,
+    );
+    expect(effects).toHaveLength(2);
+    expect(effects[0].pieceId).toBe("victim1");
+    expect(effects[1].pieceId).toBe("victim2");
   });
 });
 

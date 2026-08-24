@@ -23,6 +23,10 @@ export interface CaptureRecord {
 export interface GyojuBonusResult {
   pieces: Piece[];
   capturedPieceIds: PieceId[];
+  /** 보너스 전진이 실제로 발동했는지 — UI가 "교주 발동!" 말풍선을 띄울지 판단하는 데 쓴다. */
+  fired: boolean;
+  /** 마담에게 저지됐다면 그 마담의 pieceId — UI가 "마담 발동!" 말풍선을 띄울지 판단하는 데 쓴다. */
+  blockedBy: PieceId | null;
 }
 
 function roll(chance: number, rng: Rng): boolean {
@@ -40,18 +44,19 @@ function onBoard(position: Position): boolean {
 
 /**
  * eventPosition과 같은 줄에 있는 상대(abilityOwnerTeamId 기준 적팀)의 마담이 하나라도 저지에
- * 성공하면 true. 마담이 여럿이면 각각 독립적으로 판정하고, 하나라도 성공하면 즉시 저지된다.
+ * 성공하면 그 마담의 pieceId를 반환(UI 알림용), 아니면 null. 마담이 여럿이면 각각 독립적으로
+ * 판정하고, 하나라도 성공하면 즉시 저지된다.
  */
-function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosition: Position, rng: Rng): boolean {
+function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosition: Position, rng: Rng): PieceId | null {
   const enemyMadams = pieces.filter(
     (p) => p.character === "마담" && p.teamId !== "" && p.teamId !== abilityOwnerTeamId && onBoard(p.position),
   );
   for (const madam of enemyMadams) {
     if (sameSide(madam.position, eventPosition) && roll(MADAM_BLOCK_CHANCE, rng)) {
-      return true;
+      return madam.id;
     }
   }
-  return false;
+  return null;
 }
 
 /**
@@ -67,15 +72,16 @@ export function applyGyojuBonus(
 ): GyojuBonusResult {
   const mover = pieces.find((p) => p.id === moverId);
   if (!mover || mover.character !== "교주" || piggybackedIds.length === 0 || !onBoard(mover.position)) {
-    return { pieces, capturedPieceIds: [] };
+    return { pieces, capturedPieceIds: [], fired: false, blockedBy: null };
   }
 
-  if (isBlockedByMadam(pieces, mover.teamId, mover.position, rng)) {
-    return { pieces, capturedPieceIds: [] };
+  const blockedBy = isBlockedByMadam(pieces, mover.teamId, mover.position, rng);
+  if (blockedBy) {
+    return { pieces, capturedPieceIds: [], fired: false, blockedBy };
   }
 
   if (!roll(GYOJU_CHANCE, rng)) {
-    return { pieces, capturedPieceIds: [] };
+    return { pieces, capturedPieceIds: [], fired: false, blockedBy: null };
   }
 
   const groupIds = new Set([moverId, ...piggybackedIds]);
@@ -96,10 +102,16 @@ export function applyGyojuBonus(
     return p;
   });
 
-  return { pieces: result, capturedPieceIds };
+  return { pieces: result, capturedPieceIds, fired: true, blockedBy: null };
 }
 
-function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[] | null {
+interface TryResponseResult {
+  pieces: Piece[] | null;
+  /** 응답을 시도한 후보 중 하나라도 마담에게 저지됐다면 그 마담의 pieceId(UI 알림용) — 마지막으로 저지된 후보 기준. */
+  blockedBy: PieceId | null;
+}
+
+function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResponseResult {
   const candidates = pieces.filter(
     (p) =>
       p.character === "의사" &&
@@ -108,48 +120,88 @@ function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[] | n
       onBoard(p.position) &&
       sameSide(p.position, capture.originalPosition),
   );
+  let blockedBy: PieceId | null = null;
   for (const uisa of candidates) {
-    if (isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng)) continue;
+    const blocker = isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng);
+    if (blocker) {
+      blockedBy = blocker;
+      continue;
+    }
     if (roll(UISA_CHANCE, rng)) {
-      return pieces.map((p) =>
+      const result = pieces.map((p) =>
         p.id === capture.pieceId
           ? { ...p, position: capture.originalPosition, previousPosition: capture.originalPreviousPosition }
           : p,
       );
+      return { pieces: result, blockedBy: null };
     }
   }
-  return null;
+  return { pieces: null, blockedBy };
 }
 
-function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[] | null {
+function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResponseResult & { redirectedTo: PieceId | null } {
   const candidates = pieces.filter(
     (p) => p.character === "성직" && p.teamId === capture.teamId && p.id !== capture.pieceId && onBoard(p.position),
   );
+  let blockedBy: PieceId | null = null;
   for (const seongjik of candidates) {
-    if (isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng)) continue;
+    const blocker = isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng);
+    if (blocker) {
+      blockedBy = blocker;
+      continue;
+    }
     if (roll(SEONGJIK_CHANCE, rng)) {
-      return pieces.map((p) =>
+      const result = pieces.map((p) =>
         p.id === capture.pieceId ? { ...p, position: seongjik.position, previousPosition: seongjik.position } : p,
       );
+      return { pieces: result, blockedBy: null, redirectedTo: seongjik.id };
     }
   }
-  return null;
+  return { pieces: null, blockedBy, redirectedTo: null };
 }
 
-function resolveOneCapture(pieces: Piece[], capture: CaptureRecord, rng: Rng): { pieces: Piece[]; negated: boolean } {
-  const restored = tryUisa(pieces, capture, rng);
-  if (restored) return { pieces: restored, negated: true };
+/** 잡힘 이벤트 1건에 대한 최종 결과 — UI가 "무슨 능력이 발동했는지" 판단하는 데 쓴다. */
+export interface CaptureEffect {
+  pieceId: PieceId;
+  /** 의사 능력으로 원위치 복원되어 사실상 무효화됐는지. */
+  negated: boolean;
+  /** 성직 능력으로 리다이렉트됐다면 그 성직의 pieceId, 아니면 null. */
+  redirectedTo: PieceId | null;
+  /** 마담에게 저지된 응답 시도가 있었다면 그 마담의 pieceId, 아니면 null. */
+  blockedBy: PieceId | null;
+}
 
-  const redirected = trySeongjik(pieces, capture, rng);
-  if (redirected) return { pieces: redirected, negated: false };
+function resolveOneCapture(
+  pieces: Piece[],
+  capture: CaptureRecord,
+  rng: Rng,
+): { pieces: Piece[]; effect: CaptureEffect } {
+  const uisaAttempt = tryUisa(pieces, capture, rng);
+  if (uisaAttempt.pieces) {
+    return {
+      pieces: uisaAttempt.pieces,
+      effect: { pieceId: capture.pieceId, negated: true, redirectedTo: null, blockedBy: null },
+    };
+  }
 
-  return { pieces, negated: false };
+  const seongjikAttempt = trySeongjik(pieces, capture, rng);
+  if (seongjikAttempt.pieces) {
+    return {
+      pieces: seongjikAttempt.pieces,
+      effect: { pieceId: capture.pieceId, negated: false, redirectedTo: seongjikAttempt.redirectedTo, blockedBy: null },
+    };
+  }
+
+  const blockedBy = uisaAttempt.blockedBy ?? seongjikAttempt.blockedBy;
+  return { pieces, effect: { pieceId: capture.pieceId, negated: false, redirectedTo: null, blockedBy } };
 }
 
 export interface CaptureResponseResult {
   pieces: Piece[];
   /** 의사 능력으로 원위치 복원되어 "사실상 무효화"된 캡처의 pieceId 목록 — 잡기 보너스 던지기 지급 대상에서 뺀다. */
   negatedPieceIds: PieceId[];
+  /** captures와 같은 순서로 대응하는 발동 내역 — UI가 능력 발동 말풍선을 띄우는 데 쓴다. */
+  effects: CaptureEffect[];
 }
 
 /**
@@ -159,12 +211,14 @@ export interface CaptureResponseResult {
 export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): CaptureResponseResult {
   let result = pieces;
   const negatedPieceIds: PieceId[] = [];
+  const effects: CaptureEffect[] = [];
   for (const capture of captures) {
     const outcome = resolveOneCapture(result, capture, rng);
     result = outcome.pieces;
-    if (outcome.negated) negatedPieceIds.push(capture.pieceId);
+    effects.push(outcome.effect);
+    if (outcome.effect.negated) negatedPieceIds.push(capture.pieceId);
   }
-  return { pieces: result, negatedPieceIds };
+  return { pieces: result, negatedPieceIds, effects };
 }
 
 /** 캡처 목록 중 하나라도 의사에게 무효화되지 않고 살아남았으면 true — 잡기 보너스 던지기 지급 여부 판정에 쓴다. */

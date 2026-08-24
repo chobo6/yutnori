@@ -382,10 +382,11 @@ describe("MatchRoom", () => {
 
   // setupFourPlayers 자체가 flush(50)를 두 번 거치므로(팀/캐릭터 확정 + ready), 게임 시작 시점에
   // 걸리는 첫 던지기 타이머는 테스트 본문이 시작될 때 이미 ~50~100ms가 흐른 뒤다. 아래 타이머
-  // 테스트들은 이 오버헤드보다 확실히 큰 제한시간(400ms)을 써서 "아직 안 끝남" 상태를 안정적으로
-  // 관찰하고, 그보다 한참 뒤(500ms 추가)에 "끝남" 상태를 관찰한다.
-  const SAFE_TIMEOUT_MS = 400;
-  const SAFE_WAIT_MS = 500;
+  // 테스트들은 이 오버헤드보다 확실히 큰 제한시간(700ms)을 써서 "아직 안 끝남" 상태를 안정적으로
+  // 관찰하고, 그보다 한참 뒤(300ms 추가)에 "끝남" 상태를 관찰한다. (기존 400ms/GAE_ELAPSED_MS=375ms
+  // 조합은 여유가 25ms뿐이라 시스템 부하 시 간헐적으로 실패했다 — 여유를 넉넉히 키움.)
+  const SAFE_TIMEOUT_MS = 700;
+  const SAFE_WAIT_MS = 1000;
 
   it("던지기 제한시간을 넘기면 자동으로 무작위 결과가 던져진다", async () => {
     const { room } = await setupFourPlayers(colyseus, {

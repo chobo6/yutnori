@@ -50,9 +50,12 @@ function positionDescription(piece: PieceState): string {
 export function TurnPanel({
   room,
   chargeStartedAt,
+  chainAnimatingResult,
 }: {
   room: Room<MatchState>;
   chargeStartedAt: number;
+  /** 윷/모 체인 직후 짧게 결과 애니메이션을 보여주는 동안의 결과값 — null이면 평소 idle 화면. */
+  chainAnimatingResult: string | null;
 }) {
   const [, setTick] = useState(0);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
@@ -82,7 +85,14 @@ export function TurnPanel({
       <h3>{isMyTurn ? "내 턴!" : `${playerLabel(currentSessionId, room)}님의 턴을 기다리는 중`}</h3>
       <p>남은 시간: {remainingSeconds}초</p>
 
-      {isMyTurn && room.state.gaugePhase === "idle" && (
+      {isMyTurn && room.state.gaugePhase === "idle" && chainAnimatingResult !== null && (
+        <div>
+          <YutSticks result={chainAnimatingResult} />
+          <p>{YUT_RESULT_LABELS[chainAnimatingResult] ?? chainAnimatingResult}! 한 번 더 던질 수 있어요</p>
+        </div>
+      )}
+
+      {isMyTurn && room.state.gaugePhase === "idle" && chainAnimatingResult === null && (
         <>
           <YutStaticSticks />
           <p>보드를 꾹 누르고 있다가 떼세요</p>

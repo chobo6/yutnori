@@ -1,8 +1,9 @@
 // client/src/components/GameBoard.tsx
-import { useRef, useState, type PointerEvent, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type CSSProperties } from "react";
 import type { Room } from "colyseus.js";
 import { positionToCoords, CORNERS, CENTER, OUTER_INDICES, JUNCTION_CORNER } from "../game/boardCoords";
-import type { MatchState, PieceState } from "../game/matchTypes";
+import type { MatchState, PieceState, PositionKind } from "../game/matchTypes";
+import { useAbilityBubbles } from "../game/useAbilityBubbles";
 import { PieceToken } from "./PieceToken";
 import { TurnPanel } from "./TurnPanel";
 import styles from "./GameBoard.module.css";
@@ -11,15 +12,50 @@ function groupKey(piece: PieceState): string {
   return `${piece.positionKind}:${piece.positionIndex}`;
 }
 
+/** 지름길 대각선 4개(5/10/15번 진입 + 중앙→출발점 진출) 위의 중간칸 좌표 — 외곽 칸과 동일한 점 마커로 그린다. */
+const SHORTCUT_DOTS: { key: string; kind: PositionKind; index: number }[] = [
+  ...([5, 10, 15] as const).flatMap((junction) =>
+    ([1, 2] as const).map((step) => ({
+      key: `shortcutIn${junction}-${step}`,
+      kind: `shortcutIn${junction}` as PositionKind,
+      index: step,
+    })),
+  ),
+  ...([1, 2] as const).map((step) => ({ key: `shortcutOut-${step}`, kind: "shortcutOut" as PositionKind, index: step })),
+];
+
+/** 윷/모 체인 중(이동 없이 즉시 재던지기 가능해진 idle 상태) 결과 애니메이션을 강제로 보여주는 시간. */
+const CHAIN_ANIM_MS = 1500;
+
 export function GameBoard({ room }: { room: Room<MatchState> }) {
   const [chargeStartedAt, setChargeStartedAt] = useState(0);
   const isChargingRef = useRef(false);
+  const abilityBubbles = useAbilityBubbles(room);
+
+  // 윷/모가 나오면 서버는 이동 없이 곧바로 gaugePhase를 idle로 되돌려 즉시 재던지기를 허용한다
+  // (연속 던지기 규칙) — 그대로 두면 방금 던진 결과의 윷가락 애니메이션을 볼 틈도 없이 "보드를
+  // 꾹 누르고" 상태로 바로 넘어간다. 이 state는 그 순간을 감지해서 잠깐(CHAIN_ANIM_MS) 애니메이션을
+  // 강제로 보여주고, 그동안 다음 던지기 입력을 막는다. gaugePhase==="idle"이면서 lastThrowResult가
+  // 비어있지 않은 조합은 오직 "방금 체인됐다"는 뜻이다 — 턴이 진짜로 넘어갈 때는 lastThrowResult가
+  // 함께 비워지므로 최초 idle 상태(턴 시작)와 헷갈릴 일이 없다.
+  const [chainAnimatingResult, setChainAnimatingResult] = useState<string | null>(null);
+  const lastHandledThrowStartAt = useRef(0);
+
+  useEffect(() => {
+    const isChainReady = room.state.gaugePhase === "idle" && room.state.lastThrowResult !== "";
+    if (!isChainReady || room.state.throwStartAt === lastHandledThrowStartAt.current) return;
+    lastHandledThrowStartAt.current = room.state.throwStartAt;
+    setChainAnimatingResult(room.state.lastThrowResult);
+    const timer = setTimeout(() => setChainAnimatingResult(null), CHAIN_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [room.state.gaugePhase, room.state.lastThrowResult, room.state.throwStartAt]);
 
   function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
     // 말 이동 버튼/지름길 체크박스는 .centerOverlay 안에서 pointer-events: auto로 뚫려 있어
     // 클릭이 여기까지 버블링된다 — 그 클릭을 보드 전체의 던지기 트리거로 오인하지 않도록 가드.
     if ((e.target as HTMLElement).closest("button, input, label")) return;
     if (room.state.gaugePhase !== "idle") return;
+    if (chainAnimatingResult !== null) return; // 체인 애니메이션 보여주는 동안은 다음 던지기를 막는다
     const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
     if (currentSessionId !== room.sessionId) return;
     setChargeStartedAt(Date.now());
@@ -90,6 +126,11 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
           if (!c) return null;
           return <circle key={index} cx={c.x} cy={c.y} r={3} className={styles.cellDot} />;
         })}
+        {SHORTCUT_DOTS.map(({ key, kind, index }) => {
+          const c = positionToCoords(kind, index);
+          if (!c) return null;
+          return <circle key={key} cx={c.x} cy={c.y} r={3} className={styles.cellDot} />;
+        })}
         {CORNERS.map((c, i) => (
           <circle key={i} cx={c.x} cy={c.y} r={4} className={styles.cornerDot} />
         ))}
@@ -120,8 +161,22 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
         })}
       </div>
 
+      <div className={styles.pieceLayer}>
+        {Object.entries(abilityBubbles).map(([pieceId, text]) => {
+          const piece = room.state.pieces.find((p) => p.id === pieceId);
+          if (!piece) return null;
+          const coords = positionToCoords(piece.positionKind, piece.positionIndex);
+          if (!coords) return null;
+          return (
+            <div key={pieceId} className={styles.abilityBubble} style={{ left: `${coords.x}%`, top: `${coords.y}%` }}>
+              {text}
+            </div>
+          );
+        })}
+      </div>
+
       <div className={styles.centerOverlay}>
-        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} />
+        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} chainAnimatingResult={chainAnimatingResult} />
       </div>
     </div>
   );

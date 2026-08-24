@@ -8,8 +8,8 @@ import { sanitizeRoomTitle } from "../game/roomTitle";
 import { MatchState, PendingResultSchema, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
-const DEFAULT_THROW_TIMEOUT_MS = 5000;
-const DEFAULT_MOVE_TIMEOUT_MS = 5000;
+const DEFAULT_THROW_TIMEOUT_MS = 10000;
+const DEFAULT_MOVE_TIMEOUT_MS = 10000;
 const MAX_CHAT_LENGTH = 200;
 /** 턴당 부여 가능한 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 첫 던지기 포함 최대 3회. */
 const MAX_EXTRA_THROWS = 2;
@@ -144,6 +144,15 @@ export class MatchRoom extends Room<MatchState> {
       position: fromSchemaPosition(p.positionKind, p.positionIndex),
       previousPosition: fromSchemaPosition(p.previousPositionKind, p.previousPositionIndex),
     }));
+  }
+
+  /**
+   * 캐릭터 능력이 실제로 발동했을 때 브로드캐스트 — 상태(MatchState)에는 저장하지 않는다
+   * (채팅 말풍선과 같은 패턴, REQUIREMENTS.md §8). 클라이언트는 이 pieceId 근처에 능력명
+   * 말풍선을 잠깐 띄웠다가 자동으로 지운다.
+   */
+  private broadcastAbility(pieceId: string, character: "교주" | "의사" | "성직" | "마담") {
+    this.broadcast("abilityTriggered", { pieceId, character });
   }
 
   private isCurrentTurn(sessionId: string): boolean {
@@ -281,6 +290,8 @@ export class MatchRoom extends Room<MatchState> {
     // 80% 확률로 업힌 말 전원이 1칸 더 전진한다. 이 보너스 전진이 새로 만든 잡힘도 아래
     // resolveCaptureResponses에 함께 넘긴다(원래 이동의 잡힘 다음 순서로).
     const bonus = applyGyojuBonus(afterMove, pieceId, piggybackedIds, this.rng);
+    if (bonus.fired) this.broadcastAbility(pieceId, "교주");
+    if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
 
     const mainCaptureRecords: CaptureRecord[] = capturedPieceIds.map((id) => {
       const original = pieces.find((p) => p.id === id)!;
@@ -301,11 +312,16 @@ export class MatchRoom extends Room<MatchState> {
       };
     });
 
-    const { pieces: updated, negatedPieceIds } = resolveCaptureResponses(
+    const { pieces: updated, negatedPieceIds, effects } = resolveCaptureResponses(
       bonus.pieces,
       [...mainCaptureRecords, ...bonusCaptureRecords],
       this.rng,
     );
+    for (const effect of effects) {
+      if (effect.negated) this.broadcastAbility(effect.pieceId, "의사");
+      else if (effect.redirectedTo) this.broadcastAbility(effect.pieceId, "성직");
+      else if (effect.blockedBy) this.broadcastAbility(effect.blockedBy, "마담");
+    }
 
     for (const updatedPiece of updated) {
       const schemaPiece = this.state.pieces.find((p) => p.id === updatedPiece.id)!;
