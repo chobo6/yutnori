@@ -1,5 +1,5 @@
 import { Room, Client } from "colyseus";
-import { applyMove, type Piece } from "../game/pieces";
+import { applyMove, samePosition, type Piece } from "../game/pieces";
 import type { Position } from "../game/position";
 import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
 import { DEFAULT_GAUGE_CYCLE_MS, GRANTS_EXTRA_THROW, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
@@ -323,15 +323,24 @@ export class MatchRoom extends Room<MatchState> {
       moverAfterMove.position,
     );
 
-    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1, 2026-08-24 조건 확장) — 이번 이동으로 실제로
-    // 자리를 옮긴 말들(이동한 말 + 업힌 말들) 중 교주가 하나라도 있으면 80% 확률로 그룹 전원이
-    // 1칸 더 전진한다. 이 보너스 전진이 새로 만든 잡힘도 아래 resolveCaptureResponses에 함께
-    // 넘긴다(원래 이동의 잡힘 다음 순서로).
-    const bonus = applyGyojuBonus(afterMove, pieceId, piggybackedIds, this.rng);
+    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1 — "도착한 위치의 아군 말에 업혔을 경우") — applyMove가
+    // 반환한 piggybackedIds는 "출발 칸" 기준(함께 움직인 말들만)이라 이 능력엔 그대로 못 쓴다.
+    // 이동한 말이 "도착한" 칸에 이미 아군 말이 있어서(그 아군은 이번 이동으로 움직이지 않고
+    // 제자리에 있다가 지금 막 업힌 경우) 업힌 상태가 된 경우도 발동해야 하므로, 이동이 끝난 뒤
+    // (afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을 다시 계산한다 — "출발 칸부터
+    // 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 이렇게 하면 자연스럽게 잡힌다. 그룹 안에
+    // 교주가 하나라도 있으면 80% 확률로 그룹 전원이 1칸 더 전진한다. 이 보너스 전진이 새로 만든
+    // 잡힘도 아래 resolveCaptureResponses에 함께 넘긴다(원래 이동의 잡힘 다음 순서로).
+    const groupAfterMove = afterMove
+      .filter(
+        (p) => p.id !== pieceId && p.ownerId === moverAfterMove.ownerId && samePosition(p.position, moverAfterMove.position),
+      )
+      .map((p) => p.id);
+    const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, this.rng);
     if (bonus.fired && bonus.triggeredBy) {
       this.broadcastAbility(bonus.triggeredBy, "교주");
       const moverAfterBonus = bonus.pieces.find((p) => p.id === pieceId)!;
-      this.broadcastPieceMoved([pieceId, ...piggybackedIds], 1, false, moverAfterMove.position, moverAfterBonus.position);
+      this.broadcastPieceMoved([pieceId, ...groupAfterMove], 1, false, moverAfterMove.position, moverAfterBonus.position);
     }
     if (bonus.blockedBy) this.broadcastAbility(bonus.blockedBy, "마담");
 

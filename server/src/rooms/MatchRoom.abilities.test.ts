@@ -516,6 +516,46 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(received).toEqual([{ pieceId: gyojuId, character: "교주" }]); // 발동 주체는 업혀서 온 교주
   });
 
+  it("교주가 혼자 이동해 도착한 칸에 이미 아군 말이 있어 업힌 경우에도 발동한다(출발 칸이 아니라 도착 칸 기준 업기)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"], // 팀A — ${sessionId}-0은 교주
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 },
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`; // 교주 — 출발 칸(3)에는 혼자 있다(업기 대상 없음)
+    const allyId = `${sessionId}-1`; // 도착 칸(8)에 이미 자리잡고 있던 아군 — 이동으로 움직이지 않았다
+    placeAt(room, moverId, 3);
+    placeAt(room, allyId, 8); // 3 + 5(모) = 8, 교주가 도착하는 바로 그 칸
+
+    const received: Array<{ pieceId: string; character: string }> = [];
+    moverClient.onMessage("abilityTriggered", (msg: { pieceId: string; character: string }) => received.push(msg));
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    const ally = room.state.pieces.find((p) => p.id === allyId)!;
+    expect(mover.positionIndex).toBe(9); // 3 + 5(모) + 1(보너스) — 도착 칸에서 업혔어도 발동
+    expect(ally.positionIndex).toBe(9); // 도착 칸에 있던 아군도 보너스 전진에 함께 딸려간다
+    expect(received).toEqual([{ pieceId: moverId, character: "교주" }]);
+  });
+
   it("의사가 잡기를 무효화하면 abilityTriggered가 구조된(원위치 복원된) 말의 pieceId로 브로드캐스트된다", async () => {
     const { room, clients } = await setupTeams(
       colyseus,
