@@ -60,6 +60,31 @@ describe("applyGyojuBonus", () => {
     expect(result.triggeredBy).toBe("p1"); // 이동한 말 자신이 교주
   });
 
+  it("이동한 말이 shortcutCross 위치(5번 지름길 교차 구간)에 있어도 보너스가 발동한다", () => {
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "shortcutCross", step: 1 },
+        previousPosition: { kind: "shortcutIn", junction: 5, step: 2 },
+      },
+      {
+        id: "p2",
+        ownerId: "alice",
+        teamId: "A",
+        character: "성직",
+        position: { kind: "shortcutCross", step: 1 },
+        previousPosition: { kind: "start" },
+      },
+    ];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(true);
+    const p1 = result.pieces.find((p) => p.id === "p1")!;
+    expect(p1.position).toEqual({ kind: "shortcutCross", step: 2 }); // 1칸 추가 전진
+  });
+
   it("업힌 그룹에 교주가 여럿이면 그중 하나를 triggeredBy로 보고한다", () => {
     const pieces = [
       piece("p1", "alice", "A", "교주", 8),

@@ -216,3 +216,34 @@ describe("applyMove", () => {
     expect(capturedPieceIds).toEqual(["enemy1"]);
   });
 });
+
+describe("samePosition — cross 트랙(shortcutCross)", () => {
+  it("같은 step의 shortcutCross는 같은 칸으로 취급되어 업힌다", () => {
+    // applyMove는 "이동 전(previousPosition이 아니라 현재 position) 위치 기준"으로 업기를
+    // 판정한다(CLAUDE.md) — p1과 p2를 둘 다 shortcutCross(step:1)에 세워두고 p2를 1칸
+    // 이동시키면, p2의 이동 전 위치(shortcutCross step:1)에 같은 주인의 p1이 있었으므로
+    // p1도 함께 업혀서 이동해야 한다.
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "shortcutCross", step: 1 },
+        previousPosition: { kind: "shortcutIn", junction: 5, step: 2 },
+      },
+      {
+        id: "p2",
+        ownerId: "alice",
+        teamId: "A",
+        character: "성직",
+        position: { kind: "shortcutCross", step: 1 },
+        previousPosition: { kind: "shortcutIn", junction: 5, step: 2 },
+      },
+    ];
+    const { pieces: result, piggybackedIds } = applyMove(pieces, "p2", 1, false);
+    expect(piggybackedIds).toEqual(["p1"]);
+    const p1 = result.find((p) => p.id === "p1")!;
+    expect(p1.position).toEqual({ kind: "shortcutCross", step: 2 });
+  });
+});

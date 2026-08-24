@@ -40,7 +40,8 @@ function onBoard(position: Position): boolean {
     position.kind === "outer" ||
     position.kind === "center" ||
     position.kind === "shortcutIn" ||
-    position.kind === "shortcutOut"
+    position.kind === "shortcutOut" ||
+    position.kind === "shortcutCross"
   );
 }
 
