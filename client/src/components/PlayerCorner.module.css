@@ -18,6 +18,19 @@
   gap: 2px;
 }
 
+.waitingPiece {
+  display: flex;
+  border-radius: 50%;
+}
+
+.waitingPieceSelectable {
+  cursor: pointer;
+}
+
+.waitingPieceSelected {
+  box-shadow: 0 0 0 3px #2e7dd7;
+}
+
 .pendingRow {
   display: flex;
   gap: 3px;

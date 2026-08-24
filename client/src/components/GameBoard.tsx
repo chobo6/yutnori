@@ -5,6 +5,7 @@ import { positionToCoords, CORNERS, CENTER, OUTER_INDICES, JUNCTION_CORNER } fro
 import type { MatchState, PieceState, PositionKind } from "../game/matchTypes";
 import { useAbilityBubbles } from "../game/useAbilityBubbles";
 import { HOP_MS, usePieceAnimations } from "../game/usePieceAnimations";
+import { computeMoveDestinations } from "../game/moveDestinations";
 import { PieceToken } from "./PieceToken";
 import { TurnPanel } from "./TurnPanel";
 import styles from "./GameBoard.module.css";
@@ -28,7 +29,16 @@ const SHORTCUT_DOTS: { key: string; kind: PositionKind; index: number }[] = [
 /** 윷/모 체인 중(이동 없이 즉시 재던지기 가능해진 idle 상태) 결과 애니메이션을 강제로 보여주는 시간. */
 const CHAIN_ANIM_MS = 1500;
 
-export function GameBoard({ room }: { room: Room<MatchState> }) {
+export function GameBoard({
+  room,
+  selectedPieceId,
+  onSelectPiece,
+}: {
+  room: Room<MatchState>;
+  /** 지금 선택된 내 말 — 이 말이 쌓인 패로 갈 수 있는 도착 칸들이 파란 점으로 뜬다. */
+  selectedPieceId: string | null;
+  onSelectPiece: (pieceId: string | null) => void;
+}) {
   const [chargeStartedAt, setChargeStartedAt] = useState(0);
   const isChargingRef = useRef(false);
   const abilityBubbles = useAbilityBubbles(room);
@@ -89,6 +99,27 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
     room.send("throwRelease", {});
   }
 
+  // 말/도착지 파란 점을 제외한 보드 빈 공간을 클릭하면 선택을 취소한다 — 말/도착지 자체의
+  // onClick은 stopPropagation으로 이 핸들러까지 안 올라오게 막는다.
+  function handleBoardClick() {
+    if (room.state.gaugePhase === "resolved") onSelectPiece(null);
+  }
+
+  const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+  const canSelectPieces = currentSessionId === room.sessionId && room.state.gaugePhase === "resolved";
+  const selectedPiece =
+    canSelectPieces && selectedPieceId
+      ? room.state.pieces.find((p) => p.id === selectedPieceId && p.ownerSessionId === room.sessionId)
+      : undefined;
+  const destinations = selectedPiece ? computeMoveDestinations(selectedPiece, room.state.pendingResults) : [];
+
+  function selectFromGroup(group: PieceState[]) {
+    if (!canSelectPieces) return;
+    const mine = group.find((p) => p.ownerSessionId === room.sessionId);
+    if (!mine) return;
+    onSelectPiece(mine.id === selectedPieceId ? null : mine.id);
+  }
+
   // 애니메이션 중인 말은 최종 상태가 "start"/"finished"라도(캡처로 시작점 복귀, 방금 완주 등)
   // 애니메이션이 끝날 때까지는 계속 그려야 자연스럽다.
   const onBoardPieces = Array.from(room.state.pieces).filter(
@@ -118,6 +149,7 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onClick={handleBoardClick}
     >
       <svg className={styles.backdrop} viewBox="0 0 100 100">
         <rect
@@ -161,14 +193,27 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
         {Array.from(groups.entries()).map(([key, group]) => {
           const coords = positionToCoords(group[0].positionKind, group[0].positionIndex);
           if (!coords) return null;
+          const selectable = canSelectPieces && group.some((p) => p.ownerSessionId === room.sessionId);
           return (
-            <div key={key} className={styles.stack} style={{ left: `${coords.x}%`, top: `${coords.y}%` }}>
+            <div
+              key={key}
+              className={`${styles.stack} ${selectable ? styles.stackSelectable : ""}`}
+              style={{ left: `${coords.x}%`, top: `${coords.y}%` }}
+              onClick={
+                selectable
+                  ? (e) => {
+                      e.stopPropagation();
+                      selectFromGroup(group);
+                    }
+                  : undefined
+              }
+            >
               {group.map((piece, i) => {
                 const owner = room.state.players.get(piece.ownerSessionId);
                 return (
                   <div
                     key={piece.id}
-                    className={styles.stackItem}
+                    className={`${styles.stackItem} ${piece.id === selectedPieceId ? styles.stackItemSelected : ""}`}
                     style={{ "--i": i } as CSSProperties}
                   >
                     <PieceToken character={piece.character} team={owner?.team ?? ""} size="board" />
@@ -199,6 +244,23 @@ export function GameBoard({ room }: { room: Room<MatchState> }) {
           );
         })}
       </div>
+
+      {selectedPiece && (
+        <div className={styles.pieceLayer}>
+          {destinations.map((d, i) => (
+            <div
+              key={`${d.resultId}-${d.useShortcut}-${i}`}
+              className={styles.destinationDot}
+              style={{ left: `${d.coords.x}%`, top: `${d.coords.y}%` }}
+              onClick={(e) => {
+                e.stopPropagation();
+                room.send("movePiece", { pieceId: selectedPiece.id, resultId: d.resultId, useShortcut: d.useShortcut });
+                onSelectPiece(null);
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className={styles.pieceLayer}>
         {Object.entries(abilityBubbles).map(([pieceId, text]) => {

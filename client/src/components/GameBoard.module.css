@@ -56,11 +56,47 @@
   transform: translate(-50%, -50%);
 }
 
+.stackSelectable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .stackItem {
   position: absolute;
   top: calc(var(--i) * -6px);
   left: calc(var(--i) * -6px);
   transform: translate(-50%, -50%);
+}
+
+.stackItemSelected {
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #2e7dd7;
+}
+
+/* 선택된 말이 쌓인 패로 이동할 수 있는 칸 — 실제 마피아42 게임 UI(파란 점)를 따른다. */
+.destinationDot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: #4a9eff;
+  box-shadow: 0 0 6px 3px rgba(74, 158, 255, 0.7);
+  border: 2px solid #fffdf7;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 4;
+  animation: destinationPulse 1s ease-in-out infinite;
+}
+
+@keyframes destinationPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.25);
+  }
 }
 
 .abilityBubble {

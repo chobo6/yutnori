@@ -61,5 +61,15 @@ export const YUT_RESULT_LABELS: Record<string, string> = {
   mo: "모",
 };
 
+// server/src/game/gauge.ts의 YUT_STEPS와 동일 — 이동 가능 칸(도착지) 미리보기 계산에 필요.
+export const YUT_STEPS: Record<string, number> = {
+  backDo: -1,
+  do: 1,
+  gae: 2,
+  geol: 3,
+  yut: 4,
+  mo: 5,
+};
+
 // server/src/game/position.ts의 SHORTCUT_JUNCTIONS(5, 10, 15)와 동일.
 export const SHORTCUT_JUNCTION_INDICES = new Set([5, 10, 15]);
