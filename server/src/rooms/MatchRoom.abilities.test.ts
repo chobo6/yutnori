@@ -328,4 +328,113 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(victim.positionKind).toBe("outer");
     expect(victim.positionIndex).toBe(9); // 의사가 구조 — start로 보내지지 않고 원위치에 남는다
   });
+
+  // 스펙에서 가장 미묘한 규칙: 의사가 잡기를 무효화하면 잡기 보너스 던지기를 주지 않지만,
+  // 성직이 리다이렉트하면(잡기 자체는 "유효"했던 것으로 취급) 보너스 던지기를 그대로 준다.
+  // performMove의 두 hasEffectiveCapture(...) 호출이 이 구분을 실제로 지키는지 룸 레벨에서
+  // 검증한다 — 순수 함수 단위 테스트(abilities.test.ts)만으로는 이 두 호출이 뒤바뀌거나
+  // 누락돼도 잡히지 않는다.
+
+  it("의사가 잡기를 무효화하면 보너스 던지기를 안 준다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"], // 팀A — 이동할 말의 캐릭터는 이 능력과 무관, 유효한 조합이면 된다
+        ["성직", "의사"],
+        ["의사", "성직"], // 팀B — 의사가 잡힌 말을 지킨다
+        ["의사", "성직"],
+      ],
+      { rng: () => 0 }, // 마담이 없으므로 저지 없이 항상 의사가 성공
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`; // clients[3]는 항상 팀B
+    const uisaId = `${clients[2].sessionId}-0`; // clients[2]는 항상 팀B, 캐릭터 "의사"
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8); // 3 + 5(모)와 동일한 도착 칸
+    placeAt(room, uisaId, 7); // victim과 같은 줄(B)
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+
+    // 첫 번째로 쌓인 "모" 패로 잡기를 시도한다 — 의사가 무효화하므로 보너스 던지기는 없다.
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    // 보너스가 지급되지 않았으므로 throwsOwed는 0이지만, 체인 중 미리 쌓아둔 "개" 패가 아직
+    // pendingResults에 남아있어 턴은 아직 끝나지 않는다(같은 플레이어가 그 패로 한 번 더
+    // 이동해야 한다) — resolveThrowFor가 "모"/"개" 두 패를 모두 쌓아둔 뒤에야 이동을 허용하는
+    // 이 파일의 체인 탈출 패턴 특성상 불가피하다.
+    expect(room.state.gaugePhase).toBe("resolved");
+    expect(room.state.pendingResults.length).toBe(1);
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(moverSessionId);
+
+    // 남은 "개" 패를 아무것도 잡지 않는 무해한 이동으로 마저 소진해 턴을 실제로 종료시킨다.
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("outer");
+    expect(victim.positionIndex).toBe(8); // 잡히지 않은 것으로 복원
+
+    // 보너스 던지기가 한 번도 없었고 다른 남은 패도 없으므로 턴이 실제로 다음 사람에게 넘어간다.
+    expect(room.state.pendingResults.length).toBe(0);
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(moverSessionId);
+  });
+
+  it("성직이 리다이렉트하면 보너스 던지기를 준다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "의사"],
+        ["성직", "의사"],
+        ["의사", "성직"],
+        ["의사", "성직"],
+      ],
+      { rng: () => 0.37 }, // 의사(0.35 미만) 실패, 성직(0.4 미만) 성공 — 마담 없음
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victimId = `${clients[3].sessionId}-0`;
+    const uisaId = `${clients[2].sessionId}-0`;
+    const seongjikId = `${clients[2].sessionId}-1`;
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victimId, 8);
+    placeAt(room, uisaId, 7); // 같은 줄(B) — 의사는 발동 시도하지만 실패
+    placeAt(room, seongjikId, 12); // 다른 줄(C)이어도 성직은 제한 없음
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패로 잡기
+    await flush();
+
+    const victim = room.state.pieces.find((p) => p.id === victimId)!;
+    expect(victim.positionKind).toBe("outer");
+    expect(victim.positionIndex).toBe(12); // 성직 위치로 순간이동 — 잡기 자체는 유효했던 것으로 취급된다
+
+    // 성직의 리다이렉트는 "무효화"(negated)가 아니므로 잡기 보너스 던지기가 그대로 지급된다 —
+    // 같은 플레이어가 보너스 던지기를 기다리는 상태(idle)이지, 턴이 다음 사람에게 넘어간 게
+    // 아니다.
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(moverSessionId);
+  });
 });

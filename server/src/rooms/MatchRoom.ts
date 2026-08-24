@@ -317,9 +317,11 @@ export class MatchRoom extends Room<MatchState> {
       schemaPiece.previousPositionIndex = prevPos.index;
     }
 
-    // 사용한 패 소진 — 서버 기록(pendingResults)과 동기화 상태(lastThrowResult)를 함께 비운다.
+    // 사용한 패 소진 — 서버 기록(pendingResults)에서 제거한다. lastThrowResult는 턴이 실제로
+    // 끝나는 분기(승리 판정 / 최종 턴 넘김)에서만 비운다 — pendingResults가 아직 남아있거나
+    // 보너스 던지기가 예정된 경우엔 턴이 이어지므로, 방금 던진 결과의 윷가락 시각화가 화면에
+    // 계속 남아있어야 한다.
     this.state.pendingResults.splice(pendingIndex, 1);
-    this.state.lastThrowResult = "";
 
     const finalPieces: Piece[] = this.toGamePieces();
 
@@ -327,6 +329,7 @@ export class MatchRoom extends Room<MatchState> {
       this.state.phase = "finished";
       this.state.winnerSessionId = sessionId;
       this.state.turnDeadlineAt = 0;
+      this.state.lastThrowResult = "";
       return;
     }
 
@@ -354,6 +357,8 @@ export class MatchRoom extends Room<MatchState> {
 
     this.state.gaugePhase = "idle";
     this.extraThrowsGranted = 0;
+    this.throwsOwed = 0;
+    this.state.lastThrowResult = "";
     this.state.currentTurnIndex = nextTurnIndex(this.state.currentTurnIndex, Array.from(this.state.turnOrder));
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
