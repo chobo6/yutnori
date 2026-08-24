@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGyojuBonus, resolveCaptureResponses, type CaptureRecord, type Rng } from "./abilities";
+import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "./abilities";
 import type { Piece } from "./pieces";
 import type { Position } from "./position";
 
@@ -119,7 +119,7 @@ describe("resolveCaptureResponses", () => {
       piece("uisa", "bob", "B", "의사", 7), // victim의 원래 칸(8)과 같은 줄(B)
     ];
     pieces[0].position = { kind: "start" }; // applyMove가 이미 잡아 옮겨놓은 상태
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 8 });
   });
@@ -133,7 +133,7 @@ describe("resolveCaptureResponses", () => {
     pieces[0].position = { kind: "start" };
     // UISA_CHANCE(0.35) 미만이면 성공 - 0.37은 실패, SEONGJIK_CHANCE(0.4) 미만이면 성공 - 0.37은 성공
     const rng: Rng = () => 0.37;
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], rng);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], rng);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 15 });
   });
@@ -141,7 +141,7 @@ describe("resolveCaptureResponses", () => {
   it("의사/성직 둘 다 없거나 실패하면 잡힌 상태(start) 그대로 유지된다", () => {
     const pieces = [piece("victim", "bob", "B", "마담", 0), piece("uisa", "bob", "B", "의사", 7)];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_FAIL);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_FAIL);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "start" });
   });
@@ -149,7 +149,7 @@ describe("resolveCaptureResponses", () => {
   it("잡힌 말 자신이 의사/성직이면 그 능력은 자기 자신에 대해 발동하지 않는다", () => {
     const pieces = [piece("uisa", "bob", "B", "의사", 0)];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("uisa", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("uisa", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "uisa")!;
     expect(victim.position).toEqual({ kind: "start" }); // 무효화되지 않음
   });
@@ -161,7 +161,7 @@ describe("resolveCaptureResponses", () => {
       piece("seongjik", "bob", "B", "성직", 15),
     ];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 15 }); // 의사는 제외, 성직이 성공
   });
@@ -169,7 +169,7 @@ describe("resolveCaptureResponses", () => {
   it("성직은 '같은 줄' 제한이 없다 — 팀 어디에 있어도 발동 후보다", () => {
     const pieces = [piece("victim", "bob", "B", "마담", 0), piece("seongjik", "bob", "B", "성직", 15)];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 15 });
   });
@@ -182,7 +182,7 @@ describe("resolveCaptureResponses", () => {
       piece("enemy-madam", "alice", "A", "마담", 9), // victim 원래 칸(8)과 같은 줄(B), 상대팀(A)
     ];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "start" }); // 저지되어 그대로 잡힘
   });
@@ -197,7 +197,7 @@ describe("resolveCaptureResponses", () => {
     let call = 0;
     // 첫 번째 의사(uisa1) 시도만 실패(0.5 >= 0.35), 두 번째(uisa2)는 성공(0.1 < 0.35)
     const rng: Rng = () => (call++ === 0 ? 0.5 : 0.1);
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], rng);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], rng);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 8 });
   });
@@ -206,7 +206,7 @@ describe("resolveCaptureResponses", () => {
     const pieces = [piece("victim", "bob", "B", "성직", 0), piece("uisa", "bob", "B", "의사", 7)];
     pieces[0].position = { kind: "start" };
     const priorPrevious: Position = { kind: "outer", index: 6 };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8, priorPrevious)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8, priorPrevious)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 8 });
     expect(victim.previousPosition).toEqual(priorPrevious); // originalPreviousPosition으로 복원
@@ -219,7 +219,7 @@ describe("resolveCaptureResponses", () => {
       piece("seongjik", "bob", "B", "성직", 15),
     ];
     pieces[0].position = { kind: "start" };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "outer", index: 15 });
     expect(victim.previousPosition).toEqual({ kind: "outer", index: 15 }); // 도착지와 동일 — 빽도는 no-op
@@ -229,7 +229,7 @@ describe("resolveCaptureResponses", () => {
     const pieces = [piece("victim", "bob", "B", "마담", 8), piece("seongjik", "bob", "B", "성직", 15)];
     pieces[0].position = { kind: "start" };
     pieces[1].position = { kind: "shortcutIn", junction: 15, step: 1 };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "shortcutIn", junction: 15, step: 1 }); // 성직 위치로 순간이동
   });
@@ -238,8 +238,30 @@ describe("resolveCaptureResponses", () => {
     const pieces = [piece("victim", "bob", "B", "마담", 8), piece("uisa", "bob", "B", "의사", 7)];
     pieces[0].position = { kind: "start" };
     pieces[1].position = { kind: "shortcutIn", junction: 5, step: 1 };
-    const result = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "start" });
+  });
+});
+
+describe("hasEffectiveCapture", () => {
+  function record(pieceId: string): CaptureRecord {
+    return { pieceId, teamId: "B", originalPosition: { kind: "outer", index: 8 }, originalPreviousPosition: { kind: "start" } };
+  }
+
+  it("무효화되지 않은 캡처가 하나라도 있으면 true", () => {
+    expect(hasEffectiveCapture([record("victim")], [])).toBe(true);
+  });
+
+  it("모든 캡처가 무효화됐으면 false", () => {
+    expect(hasEffectiveCapture([record("victim")], ["victim"])).toBe(false);
+  });
+
+  it("여러 캡처 중 일부만 무효화됐으면 true(하나라도 살아남으면 인정)", () => {
+    expect(hasEffectiveCapture([record("a"), record("b")], ["a"])).toBe(true);
+  });
+
+  it("캡처 자체가 없으면 false", () => {
+    expect(hasEffectiveCapture([], [])).toBe(false);
   });
 });

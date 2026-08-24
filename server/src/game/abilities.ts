@@ -136,24 +136,38 @@ function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[]
   return null;
 }
 
-function resolveOneCapture(pieces: Piece[], capture: CaptureRecord, rng: Rng): Piece[] {
+function resolveOneCapture(pieces: Piece[], capture: CaptureRecord, rng: Rng): { pieces: Piece[]; negated: boolean } {
   const restored = tryUisa(pieces, capture, rng);
-  if (restored) return restored;
+  if (restored) return { pieces: restored, negated: true };
 
   const redirected = trySeongjik(pieces, capture, rng);
-  if (redirected) return redirected;
+  if (redirected) return { pieces: redirected, negated: false };
 
-  return pieces;
+  return { pieces, negated: false };
+}
+
+export interface CaptureResponseResult {
+  pieces: Piece[];
+  /** 의사 능력으로 원위치 복원되어 "사실상 무효화"된 캡처의 pieceId 목록 — 잡기 보너스 던지기 지급 대상에서 뺀다. */
+  negatedPieceIds: PieceId[];
 }
 
 /**
  * 잡힘 이벤트들을 스펙 §4 순서(의사 우선 -> 실패 시 성직)로 처리한다. captures 배열은
  * "발생 순서대로" 전달되어야 한다(원래 이동의 잡힘 -> 교주 보너스 전진의 잡힘 순).
  */
-export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): Piece[] {
+export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): CaptureResponseResult {
   let result = pieces;
+  const negatedPieceIds: PieceId[] = [];
   for (const capture of captures) {
-    result = resolveOneCapture(result, capture, rng);
+    const outcome = resolveOneCapture(result, capture, rng);
+    result = outcome.pieces;
+    if (outcome.negated) negatedPieceIds.push(capture.pieceId);
   }
-  return result;
+  return { pieces: result, negatedPieceIds };
+}
+
+/** 캡처 목록 중 하나라도 의사에게 무효화되지 않고 살아남았으면 true — 잡기 보너스 던지기 지급 여부 판정에 쓴다. */
+export function hasEffectiveCapture(captureRecords: CaptureRecord[], negatedPieceIds: PieceId[]): boolean {
+  return captureRecords.some((c) => !negatedPieceIds.includes(c.pieceId));
 }
