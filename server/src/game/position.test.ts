@@ -160,19 +160,40 @@ describe("moveForward", () => {
 });
 
 describe("cross 트랙 (5번 지름길 — 15번으로 실제 교차)", () => {
-  it("centerCross(중앙, exitVia=cross)에서 1칸 가면 shortcutCross 1단계", () => {
+  it("centerCross(중앙, exitVia=cross)에서 useShortcut=false로 1칸 가면 계속 cross 트랙(shortcutCross 1단계)", () => {
     const result = moveForward({ kind: "center", exitVia: "cross" }, 1, false);
     expect(result).toEqual({ kind: "shortcutCross", step: 1 });
   });
 
-  it("centerCross에서 2칸 가면 shortcutCross 2단계", () => {
+  it("centerCross에서 useShortcut=false로 2칸 가면 shortcutCross 2단계", () => {
     const result = moveForward({ kind: "center", exitVia: "cross" }, 2, false);
     expect(result).toEqual({ kind: "shortcutCross", step: 2 });
   });
 
-  it("centerCross에서 3칸 가면 정확히 외곽 15번 칸에 착지한다(완주가 아님)", () => {
+  it("centerCross에서 useShortcut=false로 3칸 가면 정확히 외곽 15번 칸에 착지한다(완주가 아님)", () => {
     const result = moveForward({ kind: "center", exitVia: "cross" }, 3, false);
     expect(result).toEqual({ kind: "outer", index: 15 });
+  });
+
+  describe("centerCross에서 useShortcut=true — 도착 방향으로 전환(2026-08-25 변경)", () => {
+    // 5번에서 지름길을 타고 정확히 중앙에 멈춰 선 말은, 원래 트랙(15번 방향)을 계속 타는 것
+    // (useShortcut=false, 위 테스트들)과 완주 방향으로 트랙을 바꾸는 것(useShortcut=true)
+    // 둘 다 선택할 수 있다 — 사용자가 명시적으로 요청한 예외. 오직 "정확히 centerCross에
+    // 멈춰 서 있는 상태"에서만 이 선택지가 있고, shortcutIn/shortcutCross 같은 중간 칸에서는
+    // 여전히 선택지가 없다(이미 지름길에 올라탄 이상 자동 진행, 기존 규칙 그대로).
+    it("1칸 가면 shortcutOut 1단계(도착 방향 트랙으로 전환)", () => {
+      const result = moveForward({ kind: "center", exitVia: "cross" }, 1, true);
+      expect(result).toEqual({ kind: "shortcutOut", step: 1 });
+    });
+
+    it("2칸 가면 shortcutOut 2단계", () => {
+      const result = moveForward({ kind: "center", exitVia: "cross" }, 2, true);
+      expect(result).toEqual({ kind: "shortcutOut", step: 2 });
+    });
+
+    it("3칸 이상 가면 완주한다(15번이 아니라)", () => {
+      expect(moveForward({ kind: "center", exitVia: "cross" }, 3, true)).toEqual({ kind: "finished" });
+    });
   });
 
   it("shortcutCross 1단계에서 1칸 더 가면 2단계", () => {

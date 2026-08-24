@@ -83,6 +83,14 @@ export function moveForward(from: Position, steps: number, useShortcut: boolean)
   }
   if (from.kind === "center") {
     if (from.exitVia === "cross") {
+      // 5번에서 타서 정확히 중앙에 멈춰 선 말은 예외적으로 여기서만 선택지가 있다(2026-08-25
+      // 변경, 사용자 명시 요청) — 원래 트랙(15번 방향)을 계속 타거나(useShortcut=false, 기존
+      // 동작), 완주 방향 트랙으로 전환할 수 있다(useShortcut=true). shortcutIn/shortcutCross
+      // 같은 지름길 중간 칸에서는 여전히 선택지가 없다(위 분기들 그대로) — 오직 "정확히
+      // 중앙에 멈춰 서 있는 상태"에서 새 턴에 이어서 움직일 때만 이 선택이 생긴다.
+      if (useShortcut) {
+        return shortcutPositionFromAbsolute(null, 3 + steps);
+      }
       return crossPositionFromAbsolute(3 + steps);
     }
     return shortcutPositionFromAbsolute(null, 3 + steps);

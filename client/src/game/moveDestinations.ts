@@ -21,6 +21,10 @@ export function computeMoveDestinations(
 ): MoveDestination[] {
   const destinations: MoveDestination[] = [];
   const atJunction = piece.positionKind === "outer" && SHORTCUT_JUNCTION_INDICES.has(piece.positionIndex);
+  // 5번에서 타서 정확히 중앙에 멈춰 선 말(centerCross)도 모서리와 마찬가지로 선택지가 둘이다
+  // (원래 트랙인 15번 방향을 계속 타거나, 도착 방향 트랙으로 전환) — movePath.ts/position.ts와
+  // 동일한 2026-08-25 변경.
+  const atCenterChoice = piece.positionKind === "centerCross";
 
   for (const result of pendingResults) {
     // 특정 말(그룹)에만 허용된 패(예: 모서리에서 발동한 교주 보너스)는 그 목록에 없는 말로는
@@ -36,7 +40,7 @@ export function computeMoveDestinations(
       continue;
     }
 
-    for (const useShortcut of atJunction ? [false, true] : [false]) {
+    for (const useShortcut of atJunction || atCenterChoice ? [false, true] : [false]) {
       const path = computeMovePath({ kind: piece.positionKind, index: piece.positionIndex }, steps, useShortcut);
       const last = path[path.length - 1];
       if (!last) continue;

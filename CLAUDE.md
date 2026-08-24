@@ -49,6 +49,8 @@ npm run build  # tsc -b && vite build
 - `Position` 타입에 `center.exitVia: "finish" | "cross"`(어느 트랙으로 이어갈지 기억)와 `shortcutCross`(5번 교차 전용 구간, `shortcutIn(junction:15,·)`와 물리적으로 같은 칸이지만 진행 방향이 반대라 별도 kind) 두 가지가 추가됐다.
 - 재검토가 다시 필요해지면(예: 15번도 진짜 교차로 바꾸고 싶어지면) 이 스펙 문서를 먼저 참고할 것 — "중앙에 멈춰 선 말이 다음에 어느 트랙으로 이어갈지"를 기억하는 `exitVia` 필드 설계가 재사용 가능하다.
 
+**중앙(centerCross)에서만 트랙 전환 허용(2026-08-25)**: 위 44번째 줄의 "선택지 없이 항상 자동 진행한다"는 규칙에 사용자가 명시적으로 요청한 예외가 하나 생겼다 — 5번에서 타서 **정확히 중앙에 멈춰 선 말**(`{kind:"center", exitVia:"cross"}`)이 새 턴에 이어서 움직일 때만, 원래 트랙(15번 방향, `useShortcut:false`)을 계속 타거나 도착 방향 트랙으로 전환(`useShortcut:true`)할 수 있다. `shortcutIn`/`shortcutCross` 같은 지름길 중간 칸이나, 하나의 큰 이동(모=5칸 등)이 중앙을 그냥 지나쳐가는 경우는 여전히 선택지가 없다 — 오직 "중앙에 멈춰 서 있는 상태에서 새로 이동을 시작할 때"만 해당. `server/src/game/position.ts`의 `moveForward`(`from.kind==="center" && from.exitVia==="cross"` 분기), `client/src/game/movePath.ts`/`moveDestinations.ts`가 동일하게 미러링한다.
+
 ## Gotchas
 
 - **`@colyseus/core@0.16.25`는 `workspace:^` 퍼블리시 버그로 `npm install`이 깨진다** — 루트 `package.json`의 `overrides: {"@colyseus/core": "0.16.24"}`로 고정해뒀음. colyseus 버전을 올릴 일이 있으면 이 override가 여전히 필요한지(상류 버그가 고쳐졌는지) 먼저 확인할 것. (`docs/TROUBLESHOOTING.md` #1)

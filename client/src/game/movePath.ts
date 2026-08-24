@@ -52,6 +52,12 @@ function stepForwardOnce(
     return { pos: shortcutFromAbsolute(pos.kind, absoluteStep), junctionKind: pos.kind };
   }
   if (pos.kind === "centerCross") {
+    // 5번에서 타서 정확히 중앙에 멈춰 선 말은 예외적으로 여기서만 선택지가 있다(server의
+    // position.ts moveForward와 동일, 2026-08-25 변경) — useShortcut=false면 원래 트랙(15번
+    // 방향)을 계속 타고, true면 완주 방향 트랙으로 전환한다.
+    if (useShortcut) {
+      return { pos: shortcutFromAbsolute(junctionKind ?? "shortcutIn5", 4), junctionKind };
+    }
     return { pos: crossFromAbsolute(4), junctionKind };
   }
   if (pos.kind === "center") {
