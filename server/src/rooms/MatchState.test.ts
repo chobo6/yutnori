@@ -26,11 +26,30 @@ describe("Position <-> Schema 변환", () => {
     expect(fromSchemaPosition(schema.kind, schema.index)).toEqual({ kind: "outer", index: 7 });
   });
 
-  it("start/center/finished는 index -1로 저장되고 복원된다", () => {
-    for (const kind of ["start", "center", "finished"] as const) {
+  it("start/finished는 index -1로 저장되고 복원된다", () => {
+    for (const kind of ["start", "finished"] as const) {
       const schema = toSchemaPosition({ kind });
       expect(schema.index).toBe(-1);
       expect(fromSchemaPosition(schema.kind, schema.index)).toEqual({ kind });
+    }
+  });
+
+  it("center(exitVia=finish)는 'center' kind 문자열로, exitVia=cross는 'centerCross'로 왕복 변환된다", () => {
+    const finish = toSchemaPosition({ kind: "center", exitVia: "finish" });
+    expect(finish).toEqual({ kind: "center", index: -1 });
+    expect(fromSchemaPosition(finish.kind, finish.index)).toEqual({ kind: "center", exitVia: "finish" });
+
+    const cross = toSchemaPosition({ kind: "center", exitVia: "cross" });
+    expect(cross).toEqual({ kind: "centerCross", index: -1 });
+    expect(fromSchemaPosition(cross.kind, cross.index)).toEqual({ kind: "center", exitVia: "cross" });
+  });
+
+  it("shortcutCross는 왕복 변환된다", () => {
+    for (const step of [1, 2] as const) {
+      const position = { kind: "shortcutCross" as const, step };
+      const schema = toSchemaPosition(position);
+      expect(schema).toEqual({ kind: "shortcutCross", index: step });
+      expect(fromSchemaPosition(schema.kind, schema.index)).toEqual(position);
     }
   });
 

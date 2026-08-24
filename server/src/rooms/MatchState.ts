@@ -14,7 +14,7 @@ export class PieceSchema extends Schema {
   @type("string") ownerSessionId: string = "";
   /** 이 말에 고정 배정된 캐릭터("교주"|"성직"|"마담"|"의사") — 능력 판정은 abilities.ts 참고. */
   @type("string") character: string = "";
-  // "start" | "outer" | "shortcutIn5" | "shortcutIn10" | "shortcutIn15" | "center" | "shortcutOut" | "finished"
+  // "start" | "outer" | "shortcutIn5" | "shortcutIn10" | "shortcutIn15" | "center" | "centerCross" | "shortcutOut" | "shortcutCross" | "finished"
   @type("string") positionKind: string = "start";
   @type("number") positionIndex: number = -1;
   @type("string") previousPositionKind: string = "start";
@@ -56,6 +56,12 @@ export function toSchemaPosition(pos: Position): { kind: string; index: number }
   if (pos.kind === "shortcutOut") {
     return { kind: "shortcutOut", index: pos.step };
   }
+  if (pos.kind === "shortcutCross") {
+    return { kind: "shortcutCross", index: pos.step };
+  }
+  if (pos.kind === "center") {
+    return { kind: pos.exitVia === "cross" ? "centerCross" : "center", index: -1 };
+  }
   return { kind: pos.kind, index: -1 };
 }
 
@@ -70,5 +76,14 @@ export function fromSchemaPosition(kind: string, index: number): Position {
   if (kind === "shortcutOut") {
     return { kind: "shortcutOut", step: index as 1 | 2 };
   }
-  return { kind: kind as "start" | "center" | "finished" };
+  if (kind === "shortcutCross") {
+    return { kind: "shortcutCross", step: index as 1 | 2 };
+  }
+  if (kind === "center") {
+    return { kind: "center", exitVia: "finish" };
+  }
+  if (kind === "centerCross") {
+    return { kind: "center", exitVia: "cross" };
+  }
+  return { kind: kind as "start" | "finished" };
 }
