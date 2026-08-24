@@ -1,19 +1,26 @@
 import { Room, Client } from "colyseus";
 import { applyMove, type Piece } from "../game/pieces";
-import { applyGyojuBonus, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
-import { DEFAULT_GAUGE_CYCLE_MS, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
+import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
+import { DEFAULT_GAUGE_CYCLE_MS, GRANTS_EXTRA_THROW, resolveThrow, YUT_STEPS, type YutResult } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
 import { sanitizeNickname } from "../game/nickname";
 import { sanitizeRoomTitle } from "../game/roomTitle";
-import { MatchState, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
+import { MatchState, PendingResultSchema, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
 const DEFAULT_THROW_TIMEOUT_MS = 5000;
 const DEFAULT_MOVE_TIMEOUT_MS = 5000;
 const MAX_CHAT_LENGTH = 200;
+/** 턴당 부여 가능한 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 첫 던지기 포함 최대 3회. */
+const MAX_EXTRA_THROWS = 2;
 
 export class MatchRoom extends Room<MatchState> {
-  private pendingThrows = new Map<string, YutResult>();
+  /** 안정적 pendingResults id 발급용 단순 증가 카운터. */
+  private pendingResultCounter = 0;
+  /** 이번 턴에 지금까지 부여된 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 최대 MAX_EXTRA_THROWS. */
+  private extraThrowsGranted = 0;
+  /** 부여는 됐지만 아직 실행하지 않은 추가 던지기 개수 — 한 번의 이동에서 최대 2번(원래 이동 + 교주 보너스) 겹쳐 부여될 수 있어 큐가 필요하다. */
+  private throwsOwed = 0;
   /**
    * 현재 활성 타이머(던지기 또는 말 선택)를 구분하는 토큰. 새 타이머를 걸 때마다 증가시키고,
    * 타이머 콜백이 실행될 때 자신이 걸릴 당시의 토큰과 현재 값을 비교한다 — 이미 실제 행동으로
@@ -23,7 +30,7 @@ export class MatchRoom extends Room<MatchState> {
   private turnToken = 0;
   private throwTimeoutMs = DEFAULT_THROW_TIMEOUT_MS;
   private moveTimeoutMs = DEFAULT_MOVE_TIMEOUT_MS;
-  /** 능력 확률 판정에 쓰는 난수 함수. 기본은 Math.random, 테스트에서 결정적 값 주입 가능. */
+  /** 능력/빽도 확률 판정에 쓰는 난수 함수. 기본은 Math.random, 테스트에서 결정적 값 주입 가능. */
   private rng: Rng = Math.random;
 
   async onCreate(options?: {
@@ -86,14 +93,17 @@ export class MatchRoom extends Room<MatchState> {
 
     this.onMessage("throwRelease", (client) => {
       if (!this.isCurrentTurn(client.sessionId) || this.state.gaugePhase !== "charging") return;
-      const result = resolveThrow(this.state.throwStartAt, Date.now());
+      const result = resolveThrow(this.state.throwStartAt, Date.now(), DEFAULT_GAUGE_CYCLE_MS, this.rng);
       this.resolveThrowFor(client.sessionId, result);
     });
 
-    this.onMessage("movePiece", (client, message: { pieceId: string; useShortcut?: boolean } | undefined) => {
-      if (!message || typeof message.pieceId !== "string") return;
-      this.performMove(client.sessionId, message.pieceId, message.useShortcut ?? false);
-    });
+    this.onMessage(
+      "movePiece",
+      (client, message: { pieceId: string; resultId: string; useShortcut?: boolean } | undefined) => {
+        if (!message || typeof message.pieceId !== "string" || typeof message.resultId !== "string") return;
+        this.performMove(client.sessionId, message.pieceId, message.resultId, message.useShortcut ?? false);
+      },
+    );
 
     // 채팅은 REQUIREMENTS.md §8: 말풍선으로 잠깐 표시했다가 사라지는 용도라 상태에 저장하지
     // 않는다 — 방 단계(대기실/플레이/종료)와 무관하게 전원에게(보낸 사람 포함) 브로드캐스트만 한다.
@@ -180,11 +190,30 @@ export class MatchRoom extends Room<MatchState> {
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 
-  /** 실제 throwRelease와 시간초과 자동 던지기가 공유하는 "결과 확정" 로직. */
+  /**
+   * 던지기 결과가 나올 때마다 실행 — 실제 throwRelease와 시간초과 자동 던지기가 공유한다.
+   * 결과를 pendingResults에 쌓고, 윷/모이면서 예산이 남아있으면 즉시 재던지기(idle) 상태로
+   * 되돌린다 — 이동 단계로 넘어가지 않는다.
+   */
   private resolveThrowFor(sessionId: string, result: YutResult) {
-    this.pendingThrows.set(sessionId, result);
+    const pending = new PendingResultSchema();
+    pending.id = `p${++this.pendingResultCounter}`;
+    pending.result = result;
+    this.state.pendingResults.push(pending);
     this.state.lastThrowResult = result;
-    // "resolved" 상태에서는 throwStart 가드에 걸려 재던지기가 불가능하다 (이동해야 다시 idle).
+
+    if (GRANTS_EXTRA_THROW.has(result) && this.extraThrowsGranted < MAX_EXTRA_THROWS) {
+      this.extraThrowsGranted++;
+      this.throwsOwed++;
+    }
+
+    if (this.throwsOwed > 0) {
+      this.throwsOwed--;
+      this.state.gaugePhase = "idle";
+      this.armThrowTimeout(sessionId);
+      return;
+    }
+
     this.state.gaugePhase = "resolved";
     this.armMoveTimeout(sessionId);
   }
@@ -212,24 +241,27 @@ export class MatchRoom extends Room<MatchState> {
   /** 던지기 제한시간 초과 — §5의 확률 분포를 그대로 따르는 무작위 결과로 대신 던진다. */
   private autoThrow(sessionId: string) {
     if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase === "resolved") return;
-    const randomElapsed = Math.random() * DEFAULT_GAUGE_CYCLE_MS;
-    const result = resolveThrow(0, randomElapsed);
+    const randomElapsed = this.rng() * DEFAULT_GAUGE_CYCLE_MS;
+    const result = resolveThrow(0, randomElapsed, DEFAULT_GAUGE_CYCLE_MS, this.rng);
     this.resolveThrowFor(sessionId, result);
   }
 
-  /** 말 선택 제한시간 초과 — 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다. */
+  /** 말 선택 제한시간 초과 — 가장 오래 쌓인 패로, 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다. */
   private autoMove(sessionId: string) {
     if (!this.isCurrentTurn(sessionId)) return;
     const target = this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
     if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
-    this.performMove(sessionId, target.id, false);
+    const oldestPending = this.state.pendingResults[0];
+    if (!oldestPending) return; // 이론상 도달 불가 — resolved 상태는 항상 pendingResults가 있어야 진입한다.
+    this.performMove(sessionId, target.id, oldestPending.id, false);
   }
 
   /** 실제 movePiece와 시간초과 자동 말 선택이 공유하는 "이동 실행" 로직. */
-  private performMove(sessionId: string, pieceId: string, useShortcut: boolean) {
-    if (!this.isCurrentTurn(sessionId)) return;
-    const result = this.pendingThrows.get(sessionId);
-    if (!result) return;
+  private performMove(sessionId: string, pieceId: string, resultId: string, useShortcut: boolean) {
+    if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase !== "resolved") return;
+    const pendingIndex = this.state.pendingResults.findIndex((p) => p.id === resultId);
+    if (pendingIndex === -1) return;
+    const result = this.state.pendingResults[pendingIndex].result as YutResult;
 
     const targetPiece = this.state.pieces.find((p) => p.id === pieceId);
     if (!targetPiece || targetPiece.ownerSessionId !== sessionId) return;
@@ -269,7 +301,11 @@ export class MatchRoom extends Room<MatchState> {
       };
     });
 
-    const updated = resolveCaptureResponses(bonus.pieces, [...mainCaptureRecords, ...bonusCaptureRecords], this.rng);
+    const { pieces: updated, negatedPieceIds } = resolveCaptureResponses(
+      bonus.pieces,
+      [...mainCaptureRecords, ...bonusCaptureRecords],
+      this.rng,
+    );
 
     for (const updatedPiece of updated) {
       const schemaPiece = this.state.pieces.find((p) => p.id === updatedPiece.id)!;
@@ -281,10 +317,9 @@ export class MatchRoom extends Room<MatchState> {
       schemaPiece.previousPositionIndex = prevPos.index;
     }
 
-    // 던지기 결과 소진 — 서버 기록(pendingThrows)과 동기화 상태(lastThrowResult)를 항상 함께 비운다.
-    this.pendingThrows.delete(sessionId);
+    // 사용한 패 소진 — 서버 기록(pendingResults)과 동기화 상태(lastThrowResult)를 함께 비운다.
+    this.state.pendingResults.splice(pendingIndex, 1);
     this.state.lastThrowResult = "";
-    this.state.gaugePhase = "idle";
 
     const finalPieces: Piece[] = this.toGamePieces();
 
@@ -295,10 +330,31 @@ export class MatchRoom extends Room<MatchState> {
       return;
     }
 
-    this.state.currentTurnIndex = nextTurnIndex(
-      this.state.currentTurnIndex,
-      Array.from(this.state.turnOrder),
-    );
+    if (hasEffectiveCapture(mainCaptureRecords, negatedPieceIds) && this.extraThrowsGranted < MAX_EXTRA_THROWS) {
+      this.extraThrowsGranted++;
+      this.throwsOwed++;
+    }
+    if (hasEffectiveCapture(bonusCaptureRecords, negatedPieceIds) && this.extraThrowsGranted < MAX_EXTRA_THROWS) {
+      this.extraThrowsGranted++;
+      this.throwsOwed++;
+    }
+
+    if (this.throwsOwed > 0) {
+      this.throwsOwed--;
+      this.state.gaugePhase = "idle";
+      this.armThrowTimeout(sessionId);
+      return;
+    }
+
+    if (this.state.pendingResults.length > 0) {
+      this.state.gaugePhase = "resolved";
+      this.armMoveTimeout(sessionId);
+      return;
+    }
+
+    this.state.gaugePhase = "idle";
+    this.extraThrowsGranted = 0;
+    this.state.currentTurnIndex = nextTurnIndex(this.state.currentTurnIndex, Array.from(this.state.turnOrder));
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 }

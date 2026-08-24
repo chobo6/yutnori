@@ -1,7 +1,6 @@
 import { boot, ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createGameServer } from "../createServer";
-import { DEFAULT_GAUGE_CYCLE_MS } from "../game/gauge";
 import { MatchState } from "./MatchState";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
@@ -32,6 +31,14 @@ async function setupFourPlayers(colyseus: ColyseusTestServer, options: Record<st
 function flush(ms = 50) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// Global Constraints에 정리된 다섯 값 — 기본 flush()(~50ms)는 "윷" zone에 걸려 결과가 매번
+// 달라지므로, 특정 결과를 확정해야 하는 테스트는 이 값들로 elapsed를 고정한다.
+const MO_ELAPSED_MS = 22;
+const YUT_ELAPSED_MS = 75;
+const GEOL_ELAPSED_MS = 188;
+const GAE_ELAPSED_MS = 375;
+const DO_ELAPSED_MS = 675;
 
 describe("MatchRoom", () => {
   let colyseus: ColyseusTestServer;
@@ -145,12 +152,12 @@ describe("MatchRoom", () => {
     await flush();
     expect(room.state.gaugePhase).toBe("charging");
 
-    // wavePosition(0.03 * cycle/2) 근방 -> "mo"(5칸) 구간을 노리고 아주 짧게 대기 후 release
-    await flush(0.03 * (DEFAULT_GAUGE_CYCLE_MS / 2));
+    await flush(GAE_ELAPSED_MS); // "개"(2칸) 구간을 노려 결과를 고정
     turnClient.send("throwRelease", {});
     await flush();
 
-    turnClient.send("movePiece", { pieceId: myPiece.id });
+    const resultId = room.state.pendingResults[0].id;
+    turnClient.send("movePiece", { pieceId: myPiece.id, resultId });
     await flush();
 
     const movedPiece = room.state.pieces.find((p) => p.id === myPiece.id)!;
@@ -165,10 +172,11 @@ describe("MatchRoom", () => {
     const otherPiece = room.state.pieces.find((p) => p.ownerSessionId !== currentTurnSessionId)!;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {});
     await flush();
-    turnClient.send("movePiece", { pieceId: otherPiece.id });
+    const resultId = room.state.pendingResults[0].id;
+    turnClient.send("movePiece", { pieceId: otherPiece.id, resultId });
     await flush();
 
     const untouchedPiece = room.state.pieces.find((p) => p.id === otherPiece.id)!;
@@ -180,7 +188,7 @@ describe("MatchRoom", () => {
     const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {});
     await flush();
 
@@ -193,7 +201,7 @@ describe("MatchRoom", () => {
     const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {});
     await flush();
     const firstResult = room.state.lastThrowResult;
@@ -214,10 +222,11 @@ describe("MatchRoom", () => {
     const myPiece = room.state.pieces.find((p) => p.ownerSessionId === currentTurnSessionId)!;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {});
     await flush();
-    turnClient.send("movePiece", { pieceId: myPiece.id });
+    const resultId = room.state.pendingResults[0].id;
+    turnClient.send("movePiece", { pieceId: myPiece.id, resultId });
     await flush();
 
     expect(room.state.gaugePhase).toBe("idle");
@@ -233,10 +242,11 @@ describe("MatchRoom", () => {
     myPiece.positionIndex = -1;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {});
     await flush();
-    turnClient.send("movePiece", { pieceId: myPiece.id });
+    const resultId = room.state.pendingResults[0].id;
+    turnClient.send("movePiece", { pieceId: myPiece.id, resultId });
     await flush();
 
     expect(room.state.pieces.find((p) => p.id === myPiece.id)!.positionKind).toBe("finished");
@@ -247,7 +257,7 @@ describe("MatchRoom", () => {
     const otherPiece = room.state.pieces.find(
       (p) => p.ownerSessionId === currentTurnSessionId && p.id !== myPiece.id,
     )!;
-    turnClient.send("movePiece", { pieceId: otherPiece.id });
+    turnClient.send("movePiece", { pieceId: otherPiece.id, resultId });
     await flush();
     expect(room.state.gaugePhase).toBe("idle");
   });
@@ -358,7 +368,7 @@ describe("MatchRoom", () => {
     (room as unknown as { performMove: () => void }).performMove = () => {
       throw new Error("의도적으로 발생시킨 예외");
     };
-    client.send("movePiece", { pieceId: "x" });
+    client.send("movePiece", { pieceId: "x", resultId: "x" });
     await flush();
 
     expect(errorSpy).toHaveBeenCalled(); // onUncaughtException이 잡아서 로깅
@@ -381,6 +391,7 @@ describe("MatchRoom", () => {
     const { room } = await setupFourPlayers(colyseus, {
       throwTimeoutMs: SAFE_TIMEOUT_MS,
       moveTimeoutMs: 5000,
+      rng: () => 0.5,
     });
 
     expect(room.state.gaugePhase).toBe("idle"); // 아직 아무도 안 눌렀다
@@ -395,6 +406,7 @@ describe("MatchRoom", () => {
     const { room, clients } = await setupFourPlayers(colyseus, {
       throwTimeoutMs: SAFE_TIMEOUT_MS,
       moveTimeoutMs: 5000,
+      rng: () => 0.5,
     });
     const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
 
@@ -416,7 +428,7 @@ describe("MatchRoom", () => {
     const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
 
     turnClient.send("throwStart", {});
-    await flush(5);
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {}); // 제한시간 안에 직접 던짐
     await flush();
 
@@ -438,7 +450,7 @@ describe("MatchRoom", () => {
     const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
 
     turnClient.send("throwStart", {});
-    await flush();
+    await flush(GAE_ELAPSED_MS);
     turnClient.send("throwRelease", {}); // 직접 던지고, 말 선택은 일부러 안 보낸다
     await flush();
     expect(room.state.gaugePhase).toBe("resolved");
@@ -448,6 +460,121 @@ describe("MatchRoom", () => {
     expect(room.state.gaugePhase).toBe("idle"); // 자동 이동까지 완료되어 다시 idle
     expect(room.state.lastThrowResult).toBe("");
     expect(room.state.phase).toBe("playing"); // 방은 계속 진행 중
+  });
+
+  it("윷/모가 연속으로 나오면 이동 없이 즉시 재던지기하고, 최대 2회 추가(총 3회)로 막힌다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
+
+    // 1번째 던지기: 윷 — 즉시 재던지기 가능 상태(idle)가 되고, 이동은 아직 안 함
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.pendingResults.length).toBe(1);
+    expect(room.state.pendingResults[0].result).toBe("yut");
+
+    // 2번째 던지기: 또 윷 — 여전히 예산이 남아있어(1/2 사용) 다시 즉시 재던지기
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.pendingResults.length).toBe(2);
+
+    // 3번째 던지기: 또 윷이지만 예산(최대 2회 추가)을 이미 다 썼으므로 더 이상 재던지기가 없다
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("resolved"); // 이제 이동할 차례
+    expect(room.state.pendingResults.length).toBe(3);
+
+    // throwStart를 보내도 무시된다 — 더 던질 기회가 없다
+    turnClient.send("throwStart", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("resolved");
+  });
+
+  it("쌓인 패 중 원하는 것을 골라 순서와 무관하게 이동할 수 있다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS); // 윷 — 즉시 재던지기
+    turnClient.send("throwRelease", {});
+    await flush();
+    turnClient.send("throwStart", {});
+    await flush(GEOL_ELAPSED_MS); // 걸 — 윷이 아니므로 여기서 이동 단계로
+    turnClient.send("throwRelease", {});
+    await flush();
+
+    expect(room.state.pendingResults.length).toBe(2);
+    const [firstPending, secondPending] = room.state.pendingResults;
+    expect(firstPending.result).toBe("yut");
+    expect(secondPending.result).toBe("geol");
+
+    const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+    // 먼저 쌓인 "윷"이 아니라 나중에 쌓인 "걸"을 먼저 쓴다 — 순서 강제 없음을 확인.
+    turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId: secondPending.id });
+    await flush();
+
+    const movedPiece = room.state.pieces.find((p) => p.id === myPieces[0].id)!;
+    expect(movedPiece.positionIndex).toBe(3); // start(0) + geol(3칸)
+    expect(room.state.pendingResults.length).toBe(1);
+    expect(room.state.pendingResults[0].id).toBe(firstPending.id); // "윷"은 아직 안 씀
+  });
+
+  it("잡으면 추가 던지기를 즉시 얻는다 — 남은 패가 있어도 그 자리에서 바로 실행된다", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+    const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+    // 상대팀 말 하나를 3번 칸에 미리 놓아 캡처 대상으로 만든다 — 여전히 start에 있는 나머지
+    // 말들은 교주/성직 발동 조건(업기 대상 없음, onBoard 아님)을 만족하지 않아 얽히지 않는다.
+    // ownerSessionId만으로 "다른 사람 소유"를 걸러내면 2v2에서 같은 팀 동료(A0 기준 A1)의 말이
+    // 먼저 걸릴 수 있다(잡기는 teamId 기준이라 동료 말은 캡처되지 않는다) — 반드시 team까지 비교한다.
+    const currentTeam = room.state.players.get(currentTurnSessionId)!.team;
+    const enemyPiece = room.state.pieces.find(
+      (p) => room.state.players.get(p.ownerSessionId)!.team !== currentTeam,
+    )!;
+    enemyPiece.positionKind = "outer";
+    enemyPiece.positionIndex = 3;
+
+    // 1번째 던지기: 윷 — 보너스 1회 사용, 남은 패(윷)를 쌓아둔 채 즉시 재던지기
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.pendingResults.length).toBe(1);
+
+    // 2번째 던지기: 걸(3칸) — 윷이 아니므로 정상적으로 이동 단계(resolved)로 전환
+    turnClient.send("throwStart", {});
+    await flush(GEOL_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("resolved");
+    expect(room.state.pendingResults.length).toBe(2);
+    const geolPending = room.state.pendingResults.find((p) => p.result === "geol")!;
+
+    // "걸"로 3번 칸까지 이동해 상대 말을 잡는다 — 잡기 보너스로 즉시 재던지기(idle)가 되고,
+    // 아직 안 쓴 "윷" 패는 그대로 남아있어야 한다.
+    turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId: geolPending.id });
+    await flush();
+
+    expect(room.state.gaugePhase).toBe("idle"); // 잡기 보너스로 즉시 재던지기 상태
+    expect(room.state.pendingResults.length).toBe(1); // "걸"만 소진, "윷"은 남음
+    expect(room.state.pieces.find((p) => p.id === enemyPiece.id)!.positionKind).toBe("start"); // 상대는 시작점으로
+
+    // 잡기 보너스로 얻은 던지기를 실제로 사용할 수 있는지 확인.
+    turnClient.send("throwStart", {});
+    await flush(DO_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.pendingResults.length).toBe(2); // "윷" + 방금 던진 "도"
   });
 
   it("sendChat을 보내면 모든 클라이언트가 chatMessage 브로드캐스트를 받는다", async () => {
