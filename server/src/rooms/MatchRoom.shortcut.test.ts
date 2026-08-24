@@ -55,7 +55,11 @@ describe("MatchRoom 지름길 통합", () => {
     await flush(5); // "모"(5칸) 결과를 안정적으로 노리는 기존 관례(다른 테스트 파일들과 동일한 타이밍)
     turnClient.send("throwRelease", {});
     await flush();
-    turnClient.send("movePiece", { pieceId: myPiece.id, useShortcut: true });
+    turnClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 체인이 끝나고 이동 가능(resolved)해진다
+    turnClient.send("throwRelease", {});
+    await flush();
+    turnClient.send("movePiece", { pieceId: myPiece.id, useShortcut: true, resultId: room.state.pendingResults[0].id });
     await flush();
 
     const moved = room.state.pieces.find((p) => p.id === myPiece.id)!;

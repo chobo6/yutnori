@@ -10,6 +10,8 @@ function flush(ms = 20) {
 
 /** wavePosition 상승 초입 근처를 노려 "모"(5칸) 결과를 안정적으로 얻는다 — 기존 테스트와 동일한 관례. */
 const MO_TIMING_MS = 5;
+// "모"는 이제 이동 없이 즉시 재던지기를 유발하므로(연속 던지기 규칙), 매번 "개" 결과로 한 번 더
+// 던져 이동 가능 상태로 만든 뒤 첫 번째("모") 패를 골라 쓴다.
 
 async function setupTeams(
   colyseus: ColyseusTestServer,
@@ -81,10 +83,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, `${sessionId}-1`, 3);
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
@@ -111,10 +117,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, `${sessionId}-1`, 3);
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
@@ -143,10 +153,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, enemyMadamId, 7); // 도착 칸(8)과 같은 줄(B: 6~10)
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: `${sessionId}-0` });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const mover = room.state.pieces.find((p) => p.id === `${sessionId}-0`)!;
@@ -176,10 +190,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, uisaId, 7); // victim과 같은 줄(B)
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: moverId });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const victim = room.state.pieces.find((p) => p.id === victimId)!;
@@ -212,10 +230,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, seongjikId, 12); // 다른 줄(C)이어도 성직은 제한 없음
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: moverId });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const victim = room.state.pieces.find((p) => p.id === victimId)!;
@@ -248,10 +270,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, seongjikId, 12);
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: moverId });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const victim = room.state.pieces.find((p) => p.id === victimId)!;
@@ -283,10 +309,14 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, uisaId, 7); // victim의 원래 칸(9)과 같은 줄(B: 6~10)
 
     moverClient.send("throwStart", {});
-    await flush(MO_TIMING_MS);
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: moverId });
+    moverClient.send("throwStart", {});
+    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
     await flush();
 
     const mover = room.state.pieces.find((p) => p.id === moverId)!;
