@@ -1,4 +1,3 @@
-import { GRANTS_EXTRA_THROW, type YutResult } from "./gauge";
 import type { Piece } from "./pieces";
 
 export function buildTurnOrder(teamAIds: string[], teamBIds: string[]): string[] {
@@ -9,10 +8,7 @@ export function buildTurnOrder(teamAIds: string[], teamBIds: string[]): string[]
   return order;
 }
 
-export function nextTurnIndex(currentIndex: number, order: string[], result: YutResult): number {
-  if (GRANTS_EXTRA_THROW.has(result)) {
-    return currentIndex;
-  }
+export function nextTurnIndex(currentIndex: number, order: string[]): number {
   return (currentIndex + 1) % order.length;
 }
 

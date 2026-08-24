@@ -298,7 +298,6 @@ export class MatchRoom extends Room<MatchState> {
     this.state.currentTurnIndex = nextTurnIndex(
       this.state.currentTurnIndex,
       Array.from(this.state.turnOrder),
-      result,
     );
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }

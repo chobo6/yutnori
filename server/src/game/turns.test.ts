@@ -17,20 +17,12 @@ describe("buildTurnOrder", () => {
 describe("nextTurnIndex", () => {
   const order = ["a1", "b1", "a2", "b2"];
 
-  it("윷/모가 아니면 다음 사람으로 넘어간다", () => {
-    expect(nextTurnIndex(0, order, "gae")).toBe(1);
+  it("다음 사람으로 넘어간다", () => {
+    expect(nextTurnIndex(0, order)).toBe(1);
   });
 
   it("순환 순서 끝에서는 처음으로 돌아온다", () => {
-    expect(nextTurnIndex(3, order, "do")).toBe(0);
-  });
-
-  it("윷이 나오면 같은 사람 차례가 유지된다", () => {
-    expect(nextTurnIndex(1, order, "yut")).toBe(1);
-  });
-
-  it("모가 나오면 같은 사람 차례가 유지된다", () => {
-    expect(nextTurnIndex(2, order, "mo")).toBe(2);
+    expect(nextTurnIndex(3, order)).toBe(0);
   });
 });
 
