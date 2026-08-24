@@ -13,6 +13,8 @@ const FACE_ROUND = "#8b5a2b"; // 등(둥근 면) 위 — 결과 판정에 반영
 /** 넷 중 하나(index 0)에만 표시되는 테두리 — 전통 윷놀이의 "표식 있는 가락"과 동일한 역할로,
  * 등이 1개만 나왔을 때 이게 도인지 빽도인지 가른다. */
 const MARKED_STROKE = "#c0392b";
+/** 등면(FACE_ROUND)에 그리는 X 표시 색 — 갈색 바탕 위에서 잘 보이는 밝은 선. */
+const MARK_COLOR = "#f5e6c8";
 
 /**
  * 전통 윷놀이 물리 규칙: 등(둥근 면)이 위로 온 가락 개수로 결과가 정해진다
@@ -37,6 +39,16 @@ function targetFaces(result: string): boolean[] {
     default:
       return [false, false, false, false];
   }
+}
+
+/** (cx, cy) 중심에 한 변 길이 2r짜리 X 하나를 그린다. */
+function drawX(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy - r);
+  ctx.lineTo(cx + r, cy + r);
+  ctx.moveTo(cx + r, cy - r);
+  ctx.lineTo(cx - r, cy + r);
+  ctx.stroke();
 }
 
 /** 결과가 확정되는 순간(gaugePhase === "resolved") 윷가락 4개가 굴러떨어지는 연출. */
@@ -90,9 +102,30 @@ export function YutSticks({ result }: { result: string | null }) {
     Matter.Runner.run(runner, engine);
     Matter.Render.run(render);
 
+    // settle 이후(등/배가 확정된 뒤)에만 등면인 가락에 X 3개를 그린다 — 굴러떨어지는 동안은
+    // 아직 결과가 안 정해졌으므로 표시하지 않는다.
+    const settledRef = { current: false };
+    const faces = result ? targetFaces(result) : [false, false, false, false];
+
+    function drawMarks() {
+      if (!settledRef.current || !result) return;
+      const ctx = render.context;
+      sticks.forEach((stick, i) => {
+        if (!faces[i]) return; // 배(FACE_FLAT)면 안 그림 — 등면일 때만
+        ctx.save();
+        ctx.translate(stick.position.x, stick.position.y);
+        ctx.rotate(stick.angle);
+        ctx.strokeStyle = MARK_COLOR;
+        ctx.lineWidth = 2;
+        for (const dy of [-25, 0, 25]) drawX(ctx, 0, dy, 5);
+        ctx.restore();
+      });
+    }
+
+    Matter.Events.on(render, "afterRender", drawMarks);
+
     let settleTimeout: ReturnType<typeof setTimeout> | undefined;
     if (result) {
-      const faces = targetFaces(result);
       settleTimeout = setTimeout(() => {
         sticks.forEach((stick, i) => {
           Matter.Body.setVelocity(stick, { x: 0, y: 0 });
@@ -101,11 +134,13 @@ export function YutSticks({ result }: { result: string | null }) {
           Matter.Body.setAngle(stick, (Math.random() - 0.5) * 0.3);
           stick.render.fillStyle = faces[i] ? FACE_ROUND : FACE_FLAT;
         });
+        settledRef.current = true;
       }, TUMBLE_MS);
     }
 
     return () => {
       if (settleTimeout) clearTimeout(settleTimeout);
+      Matter.Events.off(render, "afterRender", drawMarks);
       Matter.Render.stop(render);
       Matter.Runner.stop(runner);
       Matter.World.clear(engine.world, false);
