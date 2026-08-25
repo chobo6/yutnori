@@ -644,6 +644,102 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(mover.positionIndex).toBe(6); // 5번에서 지름길 없이 1칸 더
   });
 
+  it("교주 보너스가 정확히 중앙(centerCross)에서 발동하면 즉시 적용하지 않고 트랙 선택 대기 패로 쌓인다(2026-08-25)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"], // 팀A — ${sessionId}-0은 교주
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 }, // 확률 판정 전부 성공
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`; // 교주
+    const allyId = `${sessionId}-1`;
+    placeAt(room, moverId, 5); // 이미 5번 모서리에 있다
+    placeAt(room, allyId, 5); // 업기 발생
+
+    moverClient.send("throwStart", {});
+    await flush(188); // "걸"(3칸) 구간
+    moverClient.send("throwRelease", {});
+    await flush();
+    // 지름길(useShortcut:true)로 3칸 이동 -> 5번+지름길+3칸 = 정확히 중앙(centerCross)
+    moverClient.send("movePiece", {
+      pieceId: moverId,
+      resultId: room.state.pendingResults[0].id,
+      useShortcut: true,
+    });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    const ally = room.state.pieces.find((p) => p.id === allyId)!;
+    // 보너스가 즉시 적용되지 않아 중앙에 그대로 멈춰 있어야 한다.
+    expect(mover.positionKind).toBe("centerCross");
+    expect(ally.positionKind).toBe("centerCross");
+
+    // 대신 트랙 선택을 기다리는 교주 보너스 대기 패가 쌓인다.
+    expect(room.state.pendingResults.length).toBe(1);
+    const bonusPending = room.state.pendingResults[0];
+    expect(bonusPending.result).toBe("gyojuBonus");
+    expect(Array.from(bonusPending.restrictedToPieceIds).sort()).toEqual([allyId, moverId].sort());
+    expect(room.state.gaugePhase).toBe("resolved");
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(sessionId);
+
+    // 도착 방향(useShortcut:true)을 고르면 shortcutOut(완주 트랙)으로 전환된다.
+    moverClient.send("movePiece", { pieceId: moverId, resultId: bonusPending.id, useShortcut: true });
+    await flush();
+
+    const moverAfterBonus = room.state.pieces.find((p) => p.id === moverId)!;
+    const allyAfterBonus = room.state.pieces.find((p) => p.id === allyId)!;
+    expect(moverAfterBonus.positionKind).toBe("shortcutOut");
+    expect(moverAfterBonus.positionIndex).toBe(1);
+    expect(allyAfterBonus.positionKind).toBe("shortcutOut");
+    expect(room.state.pendingResults.length).toBe(0);
+  });
+
+  it("교주 보너스가 중앙에서 발동하고 원래 트랙(useShortcut:false)을 고르면 그대로 15번 방향으로 간다", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"],
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 },
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`;
+    const allyId = `${sessionId}-1`;
+    placeAt(room, moverId, 5);
+    placeAt(room, allyId, 5);
+
+    moverClient.send("throwStart", {});
+    await flush(188);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", {
+      pieceId: moverId,
+      resultId: room.state.pendingResults[0].id,
+      useShortcut: true,
+    });
+    await flush();
+
+    const bonusPending = room.state.pendingResults[0];
+    moverClient.send("movePiece", { pieceId: moverId, resultId: bonusPending.id, useShortcut: false });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    expect(mover.positionKind).toBe("shortcutCross"); // 원래 트랙(15번 방향) 그대로 유지
+    expect(mover.positionIndex).toBe(1);
+  });
+
   it("의사가 잡기를 무효화하면 abilityTriggered가 구조된(원위치 복원된) 말의 pieceId로 브로드캐스트된다", async () => {
     const { room, clients } = await setupTeams(
       colyseus,

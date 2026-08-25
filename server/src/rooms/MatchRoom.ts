@@ -372,10 +372,16 @@ export class MatchRoom extends Room<MatchState> {
       const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, this.rng);
       if (bonus.fired && bonus.triggeredBy) {
         this.broadcastAbility(bonus.triggeredBy, "교주");
+        // 모서리(5/10/15) 또는 정확히 중앙(centerCross)에 멈춰 선 경우 둘 다 다음 이동에 실제
+        // 트랙 선택지가 있다(CLAUDE.md "중앙(centerCross)에서만 트랙 전환 허용" 참고) — 이런
+        // 경우 보너스를 useShortcut:false로 못박아 즉시 적용하면 안 되고, 일반 이동과 동일하게
+        // 대기 패로 쌓아 플레이어가 직접 고르게 해야 한다.
         const atJunction =
           moverAfterMove.position.kind === "outer" && SHORTCUT_JUNCTIONS.has(moverAfterMove.position.index);
-        if (atJunction) {
-          // 모서리에서 발동했으면 즉시 적용하지 않고, 지름길 사용 여부를 직접 고를 수 있는
+        const atCenterChoice =
+          moverAfterMove.position.kind === "center" && moverAfterMove.position.exitVia === "cross";
+        if (atJunction || atCenterChoice) {
+          // 모서리/중앙에서 발동했으면 즉시 적용하지 않고, 트랙 선택을 직접 고를 수 있는
           // 대기 패로 쌓아둔다 — 일반 던지기 이동과 같은 파란 점 선택 UI를 그대로 재사용한다.
           const pendingBonus = new PendingResultSchema();
           pendingBonus.id = `p${++this.pendingResultCounter}`;

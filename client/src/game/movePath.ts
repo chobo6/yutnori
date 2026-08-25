@@ -39,6 +39,7 @@ function stepForwardOnce(
   pos: SimplePosition,
   useShortcut: boolean,
   junctionKind: PositionKind | null,
+  canChooseAtCenter: boolean,
 ): { pos: SimplePosition; junctionKind: PositionKind | null } {
   if (pos.kind === "outer" && useShortcut && SHORTCUT_JUNCTION_INDICES.has(pos.index)) {
     const jk = (`shortcutIn${pos.index}` as PositionKind);
@@ -54,8 +55,12 @@ function stepForwardOnce(
   if (pos.kind === "centerCross") {
     // 5번에서 타서 정확히 중앙에 멈춰 선 말은 예외적으로 여기서만 선택지가 있다(server의
     // position.ts moveForward와 동일, 2026-08-25 변경) — useShortcut=false면 원래 트랙(15번
-    // 방향)을 계속 타고, true면 완주 방향 트랙으로 전환한다.
-    if (useShortcut) {
+    // 방향)을 계속 타고, true면 완주 방향 트랙으로 전환한다. 단, 이 선택은 "이번 이동이 정확히
+    // 중앙에서 시작할 때"(canChooseAtCenter)만 유효하다 — 5번 모서리에서 던진 한 번의 큰 이동이
+    // 중간에 중앙을 그냥 지나치는 경우(예: 모=5칸)까지 이 선택지가 끼어들면, 한 번의 이동
+    // 안에서 트랙을 중간에 바꾸는(실제로는 불가능한) 경로가 계산돼버린다 — 그럴 땐 항상 원래
+    // 타고 있던 트랙(cross)을 그대로 이어간다.
+    if (canChooseAtCenter && useShortcut) {
       return { pos: shortcutFromAbsolute(junctionKind ?? "shortcutIn5", 4), junctionKind };
     }
     return { pos: crossFromAbsolute(4), junctionKind };
@@ -88,7 +93,10 @@ export function computeMovePath(from: SimplePosition, steps: number, useShortcut
   let current = from;
   let junctionKind: PositionKind | null = null;
   for (let i = 0; i < steps; i++) {
-    const stepped = stepForwardOnce(current, useShortcut, junctionKind);
+    // 중앙 트랙 전환 선택은 "이 이동이 정확히 중앙에서 시작할 때"(i===0이고 시작 위치 자체가
+    // centerCross)만 허용한다 — 중간에 중앙을 지나치는 경우는 항상 타고 있던 트랙 그대로.
+    const canChooseAtCenter = i === 0 && current.kind === "centerCross";
+    const stepped = stepForwardOnce(current, useShortcut, junctionKind, canChooseAtCenter);
     current = stepped.pos;
     junctionKind = stepped.junctionKind;
     path.push(current);

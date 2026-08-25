@@ -50,6 +50,8 @@ npm run build  # tsc -b && vite build
 - 재검토가 다시 필요해지면(예: 15번도 진짜 교차로 바꾸고 싶어지면) 이 스펙 문서를 먼저 참고할 것 — "중앙에 멈춰 선 말이 다음에 어느 트랙으로 이어갈지"를 기억하는 `exitVia` 필드 설계가 재사용 가능하다.
 
 **중앙(centerCross)에서만 트랙 전환 허용(2026-08-25)**: 위 44번째 줄의 "선택지 없이 항상 자동 진행한다"는 규칙에 사용자가 명시적으로 요청한 예외가 하나 생겼다 — 5번에서 타서 **정확히 중앙에 멈춰 선 말**(`{kind:"center", exitVia:"cross"}`)이 새 턴에 이어서 움직일 때만, 원래 트랙(15번 방향, `useShortcut:false`)을 계속 타거나 도착 방향 트랙으로 전환(`useShortcut:true`)할 수 있다. `shortcutIn`/`shortcutCross` 같은 지름길 중간 칸이나, 하나의 큰 이동(모=5칸 등)이 중앙을 그냥 지나쳐가는 경우는 여전히 선택지가 없다 — 오직 "중앙에 멈춰 서 있는 상태에서 새로 이동을 시작할 때"만 해당. `server/src/game/position.ts`의 `moveForward`(`from.kind==="center" && from.exitVia==="cross"` 분기), `client/src/game/movePath.ts`/`moveDestinations.ts`가 동일하게 미러링한다.
+  - **클라이언트 시각화 버그였던 부분(같은 날 수정)**: `client/src/game/movePath.ts`가 한 번의 연속 이동(예: 5번에서 모=5칸)을 한 칸씩 시뮬레이션할 때, 그 경로가 중간에 정확히 중앙을 "지나치는" 시점에도 위 선택 로직이 잘못 끼어들어 "중앙까지 3칸 + 거기서 꺾어서 2칸"처럼 실제로는 불가능한(트랙을 이동 도중에 바꾸는) 목적지 점을 표시하는 버그가 있었다. 선택은 오직 이동이 **정확히 중앙에서 시작할 때**(`computeMovePath`의 첫 스텝이면서 시작 위치 자체가 centerCross)만 유효하다 — `stepForwardOnce`에 `canChooseAtCenter` 플래그를 추가해 구분한다. 서버(`position.ts`)는 애초에 각 이동을 스텝별 시뮬레이션이 아니라 시작 위치 기준 닫힌 형태 계산으로 처리해 이 버그가 없었다.
+  - **교주 보너스도 중앙 정지 시 선택권 필요(같은 날 확장)**: 모서리(5/10/15)에서 교주 보너스가 발동하면 즉시 적용하지 않고 대기 패로 쌓는 기존 규칙(위 §3.1/§4 changelog)이 "본 이동이 정확히 중앙(centerCross)에 멈춰 선 채로 끝난 경우"까지 확장됐다 — 안 그러면 `useShortcut:false`로 못박혀 자동으로 15번 방향(돌아가는 길)으로만 가고 도착 방향을 고를 수 없었다. `MatchRoom.ts`의 `atJunction` 판정에 `atCenterChoice`(`position.kind==="center" && exitVia==="cross"`)를 or 조건으로 추가했다.
 
 ## Gotchas
 
