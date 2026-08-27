@@ -18,6 +18,12 @@ export interface PlayerState {
   characters: string[];
 }
 
+/** 2026-08-27 관전 기능 — 게임이 시작된 뒤 들어와 자기 말 없이 구경만 하는 참가자. */
+export interface SpectatorState {
+  sessionId: string;
+  nickname: string;
+}
+
 export interface PieceState {
   id: string;
   ownerSessionId: string;
@@ -39,6 +45,7 @@ export interface MatchState {
   phase: "waiting" | "playing" | "finished";
   mode: "2v2" | "1v1";
   players: Map<string, PlayerState>;
+  spectators: Map<string, SpectatorState>;
   pieces: PieceState[];
   turnOrder: string[];
   currentTurnIndex: number;

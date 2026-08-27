@@ -9,6 +9,11 @@ export class PlayerState extends Schema {
   @type(["string"]) characters = new ArraySchema<string>();
 }
 
+export class SpectatorState extends Schema {
+  @type("string") sessionId: string = "";
+  @type("string") nickname: string = "";
+}
+
 export class PieceSchema extends Schema {
   @type("string") id: string = "";
   @type("string") ownerSessionId: string = "";
@@ -35,6 +40,8 @@ export class MatchState extends Schema {
   @type("string") phase: string = "waiting"; // "waiting" | "playing" | "finished"
   @type("string") mode: string = "2v2"; // "2v2" | "1v1"
   @type({ map: PlayerState }) players = new MapSchema<PlayerState>();
+  /** 게임이 시작된 뒤(2026-08-27~) 들어온 관전자 — 자기 말을 조종하지 않고 구경만 한다. */
+  @type({ map: SpectatorState }) spectators = new MapSchema<SpectatorState>();
   @type([PieceSchema]) pieces = new ArraySchema<PieceSchema>();
   @type(["string"]) turnOrder = new ArraySchema<string>();
   @type("number") currentTurnIndex: number = 0;

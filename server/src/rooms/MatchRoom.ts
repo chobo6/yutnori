@@ -13,7 +13,15 @@ import {
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
 import { sanitizeNickname } from "../game/nickname";
 import { sanitizeRoomTitle } from "../game/roomTitle";
-import { MatchState, PendingResultSchema, PieceSchema, PlayerState, fromSchemaPosition, toSchemaPosition } from "./MatchState";
+import {
+  MatchState,
+  PendingResultSchema,
+  PieceSchema,
+  PlayerState,
+  SpectatorState,
+  fromSchemaPosition,
+  toSchemaPosition,
+} from "./MatchState";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
 const DEFAULT_THROW_TIMEOUT_MS = 10000;
@@ -21,6 +29,9 @@ const DEFAULT_MOVE_TIMEOUT_MS = 10000;
 const MAX_CHAT_LENGTH = 200;
 /** 턴당 부여 가능한 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 첫 던지기 포함 최대 3회. */
 const MAX_EXTRA_THROWS = 2;
+/** 실제 플레이어 자리 수(2v2=4, 1v1=2)와 무관하게 넉넉히 잡아두는 Colyseus maxClients — 진짜
+ * 자리 제한은 playerCapacity로 직접 관리한다(관전자가 이 한도에 걸리면 안 되므로). */
+const MAX_CLIENTS_WITH_SPECTATORS = 1000;
 
 export class MatchRoom extends Room<MatchState> {
   /** 안정적 pendingResults id 발급용 단순 증가 카운터. */
@@ -40,6 +51,11 @@ export class MatchRoom extends Room<MatchState> {
   private moveTimeoutMs = DEFAULT_MOVE_TIMEOUT_MS;
   /** 능력/빽도 확률 판정에 쓰는 난수 함수. 기본은 Math.random, 테스트에서 결정적 값 주입 가능. */
   private rng: Rng = Math.random;
+  /** 실제 플레이어 자리 수(2v2=4, 1v1=2) — Colyseus maxClients는 관전자를 위해 크게 열어두므로
+   * (MAX_CLIENTS_WITH_SPECTATORS), "대기 중인 방이 꽉 찼는지"는 이 값으로 직접 판정한다. */
+  private playerCapacity = 4;
+  /** 게임 시작 후 관전 입장을 허용할지 — 방 만들 때 결정, 기본 허용. */
+  private allowSpectators = true;
 
   async onCreate(options?: {
     title?: string;
@@ -47,17 +63,29 @@ export class MatchRoom extends Room<MatchState> {
     throwTimeoutMs?: number;
     moveTimeoutMs?: number;
     rng?: Rng;
+    allowSpectators?: boolean;
   }) {
     this.setState(new MatchState());
 
     const mode = options?.mode === "1v1" ? "1v1" : "2v2";
     this.state.mode = mode;
-    this.maxClients = mode === "1v1" ? 2 : 4;
+    this.playerCapacity = mode === "1v1" ? 2 : 4;
+    this.allowSpectators = options?.allowSpectators !== false;
+    // 실제 인원 제한(playerCapacity)과 별개로, Colyseus 자체의 maxClients는 관전자도 받을 수
+    // 있게 넉넉히 열어둔다 — onJoin이 방 단계(phase)로 플레이어/관전자를 직접 가른다.
+    this.maxClients = MAX_CLIENTS_WITH_SPECTATORS;
 
     const title = sanitizeRoomTitle(options?.title) || "이름 없는 방";
     // matchMaker가 onCreate의 반환(Promise)을 기다려주므로, 방 생성 직후 바로
     // getAvailableRooms()/테스트에서 메타데이터를 조회해도 항상 최신 값이 보이도록 await한다.
-    await this.setMetadata({ title, mode });
+    await this.setMetadata({
+      title,
+      mode,
+      phase: "waiting",
+      allowSpectators: this.allowSpectators,
+      playerCount: 0,
+      playerCapacity: this.playerCapacity,
+    });
 
     if (typeof options?.throwTimeoutMs === "number") this.throwTimeoutMs = options.throwTimeoutMs;
     if (typeof options?.moveTimeoutMs === "number") this.moveTimeoutMs = options.moveTimeoutMs;
@@ -123,15 +151,44 @@ export class MatchRoom extends Room<MatchState> {
     });
   }
 
+  /**
+   * 대기 중(phase==="waiting")이고 자리가 남아있으면 플레이어로, 그 외(이미 시작됐거나 끝난
+   * 방)에는 관전이 허용된 경우에만 관전자로 받는다. 둘 다 안 되면 예외를 던져 입장 자체를
+   * 거부한다(Colyseus가 join 요청을 reject 처리) — 2026-08-27 관전 기능 추가.
+   */
   onJoin(client: Client, options?: { nickname?: string }) {
-    const player = new PlayerState();
-    player.sessionId = client.sessionId;
-    player.nickname = sanitizeNickname(options?.nickname) || "플레이어";
-    this.state.players.set(client.sessionId, player);
+    const nickname = sanitizeNickname(options?.nickname) || "플레이어";
+
+    if (this.state.phase === "waiting") {
+      if (this.state.players.size >= this.playerCapacity) {
+        throw new Error("방이 가득 찼습니다");
+      }
+      const player = new PlayerState();
+      player.sessionId = client.sessionId;
+      player.nickname = nickname;
+      this.state.players.set(client.sessionId, player);
+      this.setMetadata({ playerCount: this.state.players.size });
+      return;
+    }
+
+    if (!this.allowSpectators) {
+      throw new Error("관전이 허용되지 않는 방입니다");
+    }
+    const spectator = new SpectatorState();
+    spectator.sessionId = client.sessionId;
+    spectator.nickname = nickname;
+    this.state.spectators.set(client.sessionId, spectator);
   }
 
   onLeave(client: Client) {
+    if (this.state.spectators.has(client.sessionId)) {
+      this.state.spectators.delete(client.sessionId);
+      return;
+    }
     this.state.players.delete(client.sessionId);
+    if (this.state.phase === "waiting") {
+      this.setMetadata({ playerCount: this.state.players.size });
+    }
   }
 
   /**
@@ -230,7 +287,10 @@ export class MatchRoom extends Room<MatchState> {
     }
 
     this.state.phase = "playing";
-    this.lock(); // maxClients 자동 잠금은 플레이어 이탈 시 풀리므로 명시적으로 잠가야 한다
+    // 예전엔 여기서 this.lock()을 불렀지만, Colyseus의 진짜 lock()은 joinById 자체를 막아버려서
+    // (matchmaker가 "room is locked"로 거부) 관전자도 못 들어오게 된다 — 그래서 더 이상 잠그지
+    // 않고, onJoin이 phase를 보고 플레이어/관전자를 직접 가른다(관전 방지는 allowSpectators로).
+    this.setMetadata({ phase: "playing" });
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 
@@ -437,6 +497,7 @@ export class MatchRoom extends Room<MatchState> {
 
     if (checkWinner(finalPieces, sessionId)) {
       this.state.phase = "finished";
+      this.setMetadata({ phase: "finished" });
       this.state.winnerSessionId = sessionId;
       this.state.turnDeadlineAt = 0;
       this.state.lastThrowResult = "";

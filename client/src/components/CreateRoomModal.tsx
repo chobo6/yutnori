@@ -15,6 +15,7 @@ export function CreateRoomModal({
 }) {
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<"2v2" | "1v1">("2v2");
+  const [allowSpectators, setAllowSpectators] = useState(true);
   const [creating, setCreating] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -22,7 +23,7 @@ export function CreateRoomModal({
     if (creating) return;
     setCreating(true);
     try {
-      const room = await createRoom(title, mode, nickname);
+      const room = await createRoom(title, mode, nickname, allowSpectators);
       onCreated(room);
     } catch (err) {
       console.error("방 생성 실패", err);
@@ -51,6 +52,14 @@ export function CreateRoomModal({
             1v1
           </label>
         </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={allowSpectators}
+            onChange={(e) => setAllowSpectators(e.target.checked)}
+          />
+          관전 허용
+        </label>
         <button type="submit" disabled={creating}>
           {creating ? "만드는 중..." : "만들기"}
         </button>

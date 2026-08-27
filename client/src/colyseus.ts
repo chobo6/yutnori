@@ -17,7 +17,18 @@ const client = new Client(wsUrl);
 // matchMaker.query()로 대신 제공하는 /api/rooms를 직접 fetch한다.
 const httpUrl = wsUrl.replace(/^ws/, "http");
 
-export async function listRooms(): Promise<RoomAvailable<{ title: string; mode: "2v2" | "1v1" }>[]> {
+/** server/src/rooms/MatchRoom.ts가 setMetadata로 채우는 방 목록 메타데이터 — 2026-08-27
+ * 관전 기능 도입 이후 phase/allowSpectators/playerCount/playerCapacity가 추가됐다. */
+export interface RoomMeta {
+  title: string;
+  mode: "2v2" | "1v1";
+  phase: "waiting" | "playing" | "finished";
+  allowSpectators: boolean;
+  playerCount: number;
+  playerCapacity: number;
+}
+
+export async function listRooms(): Promise<RoomAvailable<RoomMeta>[]> {
   const res = await fetch(`${httpUrl}/api/rooms`);
   if (!res.ok) throw new Error(`방 목록 조회 실패: ${res.status}`);
   return res.json();
@@ -27,8 +38,9 @@ export function createRoom(
   title: string,
   mode: "2v2" | "1v1",
   nickname: string,
+  allowSpectators: boolean,
 ): Promise<Room<MatchState>> {
-  return client.create<MatchState>("match", { title, mode, nickname });
+  return client.create<MatchState>("match", { title, mode, nickname, allowSpectators });
 }
 
 export function joinRoom(roomId: string, nickname: string): Promise<Room<MatchState>> {

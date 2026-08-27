@@ -376,12 +376,14 @@ describe("MatchRoom", () => {
     expect(room.state.players.get(client.sessionId)!.characters.length).toBe(0);
   });
 
-  it("mode에 따라 maxClients가 정해진다", async () => {
+  it("maxClients는 모드와 무관하게 관전자를 위해 크게 열려있고, 실제 플레이어 자리 수는 메타데이터의 playerCapacity로 정해진다(2026-08-27 관전 기능)", async () => {
     const room2v2 = await colyseus.createRoom<MatchState>("match", {});
-    expect(room2v2.maxClients).toBe(4);
+    expect(room2v2.maxClients).toBeGreaterThan(4);
+    expect(room2v2.metadata?.playerCapacity).toBe(4);
 
     const room1v1 = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    expect(room1v1.maxClients).toBe(2);
+    expect(room1v1.maxClients).toBeGreaterThan(2);
+    expect(room1v1.metadata?.playerCapacity).toBe(2);
   });
 
   it("방 생성 시 title이 메타데이터로 저장된다", async () => {
@@ -405,9 +407,10 @@ describe("MatchRoom", () => {
     expect(room.state.players.get(withoutNickname.sessionId)!.nickname).toBe("플레이어");
   });
 
-  it("게임이 시작되면 방이 잠긴다", async () => {
+  it("게임이 시작되면 방은 잠기지 않지만(관전 입장을 막지 않기 위해) metadata.phase가 바뀐다(2026-08-27 관전 기능)", async () => {
     const { room } = await setupFourPlayers(colyseus);
-    expect(room.locked).toBe(true);
+    expect(room.locked).toBe(false);
+    expect(room.metadata?.phase).toBe("playing");
   });
 
   it("핸들러 안에서 예외가 나도 onUncaughtException이 막아 방이 살아남는다", async () => {
@@ -716,5 +719,92 @@ describe("MatchRoom", () => {
     const stillAllAtStart = room.state.pieces.every((p) => p.positionKind === "start");
     expect(stillAllAtStart).toBe(false); // 최소 한 번은 자동으로 말이 움직였어야 한다
     expect(room.state.phase).toBe("playing"); // 이 정도 시간으로는 아직 승부가 나지 않는다
+  });
+
+  describe("관전 기능(2026-08-27)", () => {
+    it("게임이 시작된 방에 새로 들어오면 플레이어가 아니라 관전자로 등록된다", async () => {
+      const { room } = await setupFourPlayers(colyseus);
+      const beforePlayerCount = room.state.players.size;
+
+      const spectatorClient = await colyseus.connectTo(room);
+      await flush();
+
+      expect(room.state.players.size).toBe(beforePlayerCount); // 플레이어 수는 그대로
+      expect(room.state.players.has(spectatorClient.sessionId)).toBe(false);
+      expect(room.state.spectators.has(spectatorClient.sessionId)).toBe(true);
+    });
+
+    it("관전자가 나가면 spectators에서만 빠지고 players는 영향 없다", async () => {
+      const { room } = await setupFourPlayers(colyseus);
+      const spectatorClient = await colyseus.connectTo(room);
+      await flush();
+      expect(room.state.spectators.size).toBe(1);
+
+      await spectatorClient.leave();
+      await flush();
+
+      expect(room.state.spectators.size).toBe(0);
+      expect(room.state.players.size).toBe(4); // 플레이어는 그대로
+    });
+
+    it("방 만들 때 allowSpectators:false를 주면 게임 시작 후 새 입장이 거부된다", async () => {
+      const { room } = await setupFourPlayers(colyseus, { allowSpectators: false });
+
+      await expect(colyseus.connectTo(room)).rejects.toThrow();
+      expect(room.state.spectators.size).toBe(0);
+    });
+
+    it("대기 중인 방이 꽉 차면(자리 4개 다 참) 5번째 입장은 거부된다", async () => {
+      const room = await colyseus.createRoom<MatchState>("match", {});
+      await colyseus.connectTo(room);
+      await colyseus.connectTo(room);
+      await colyseus.connectTo(room);
+      await colyseus.connectTo(room);
+      await flush();
+      expect(room.state.players.size).toBe(4);
+
+      // 아직 phase는 "waiting"(4명 다 team/character/ready를 안 채웠으므로) — 이 상태에서
+      // 5번째는 관전자가 아니라 거부되어야 한다(대기 중엔 관전 개념이 없다).
+      expect(room.state.phase).toBe("waiting");
+      await expect(colyseus.connectTo(room)).rejects.toThrow();
+    });
+
+    it("플레이어가 들어오고 나갈 때마다 메타데이터의 playerCount가 갱신된다", async () => {
+      const room = await colyseus.createRoom<MatchState>("match", {});
+      expect(room.metadata?.playerCount).toBe(0);
+
+      const client = await colyseus.connectTo(room);
+      await flush();
+      expect(room.metadata?.playerCount).toBe(1);
+
+      await client.leave();
+      await flush();
+      expect(room.metadata?.playerCount).toBe(0);
+    });
+
+    it("게임이 끝나면 metadata.phase가 finished로 바뀐다", async () => {
+      // setupFourPlayers의 기본 rng(0.3)는 "도"(1칸) 구간을 확인 성공/빽도 없이 그대로
+      // 확정시킨다(DO_ELAPSED_MS=50과 동일한 기본 flush(50)) — 체인 없이 매번 정확히 1칸.
+      const { room, clients } = await setupFourPlayers(colyseus);
+      const winnerSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const winnerClient = clients.find((c) => c.sessionId === winnerSessionId)!;
+      const winnerPieces = room.state.pieces.filter((p) => p.ownerSessionId === winnerSessionId);
+      // 한 말은 이미 완주시켜두고, 나머지 한 말만 "도"(1칸) 한 번으로 완주하게 해서 턴이 다른
+      // 사람에게 넘어가기 전(한 번의 movePiece)에 승리 판정까지 끝나게 한다.
+      winnerPieces[0].positionKind = "finished";
+      winnerPieces[0].positionIndex = -1;
+      winnerPieces[1].positionKind = "outer";
+      winnerPieces[1].positionIndex = 19;
+
+      winnerClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      winnerClient.send("throwRelease", {});
+      await flush();
+      winnerClient.send("movePiece", { pieceId: winnerPieces[1].id, resultId: room.state.pendingResults[0].id });
+      await flush();
+
+      expect(room.state.phase).toBe("finished");
+      expect(room.metadata?.phase).toBe("finished");
+    });
   });
 });

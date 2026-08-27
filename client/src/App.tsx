@@ -52,7 +52,7 @@ function App() {
   return (
     <div>
       {/* 대기실/플레이/종료 단계와 무관하게 항상 표시 — 채팅 말풍선이 뜰 자리 겸 채팅 입력창. */}
-      <ParticipantBar room={room} />
+      <ParticipantBar room={room} onLeaveLobby={() => setRoom(null)} />
 
       {room.state.phase === "waiting" && <WaitingRoom room={room} />}
 

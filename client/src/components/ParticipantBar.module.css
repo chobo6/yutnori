@@ -22,6 +22,22 @@
   background: #f3f3f3;
 }
 
+/* 관전자(2026-08-27~)는 플레이어와 구분되게 점선 테두리 + 옅은 배경으로 표시한다. */
+.spectatorAvatar {
+  border: 1px dashed #999;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  background: transparent;
+  color: #666;
+}
+
+.leaveButton {
+  margin-left: auto;
+  align-self: center;
+  height: fit-content;
+}
+
 .bubble {
   position: absolute;
   bottom: 100%;

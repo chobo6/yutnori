@@ -29,14 +29,19 @@ export function createGameServer() {
     // dev 환경에서는 client(5173)와 server(2567)가 다른 origin이라 CORS 헤더가
     // 없으면 브라우저가 응답을 못 읽는다. 인증 없는 공개 방 목록이라 와일드카드로 열어도 안전함.
     res.header("Access-Control-Allow-Origin", "*");
-    const rooms = await matchMaker.query({ name: "match", locked: false });
+    // 관전 기능(2026-08-27~) 도입 이후로는 진행 중인 방도 목록에 보여야(관전하기) 하므로
+    // 더 이상 locked:false로 거르지 않는다 — MatchRoom.ts가 metadata.phase로 대기/진행 상태를
+    // 직접 알려준다. 끝난 방(승패가 나서 아무도 다시 볼 이유가 없는 상태)만 걸러낸다.
+    const rooms = await matchMaker.query({ name: "match" });
     res.json(
-      rooms.map((r) => ({
-        roomId: r.roomId,
-        clients: r.clients,
-        maxClients: r.maxClients,
-        metadata: r.metadata,
-      })),
+      rooms
+        .filter((r) => r.metadata?.phase !== "finished")
+        .map((r) => ({
+          roomId: r.roomId,
+          clients: r.clients,
+          maxClients: r.maxClients,
+          metadata: r.metadata,
+        })),
     );
   });
 
