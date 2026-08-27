@@ -63,6 +63,12 @@
 
 body {
   margin: 0;
+  /* 모바일에서 더블탭/핀치 줌이 들어오는 걸 막는다 — index.html의 viewport user-scalable=no와
+     이중으로 걸어둔다(일부 구형 브라우저는 viewport 메타의 user-scalable을 무시하고 더블탭
+     줌만은 그대로 허용하는 경우가 있어서). GameBoard.module.css의 .board는 이미 touch-action:
+     none으로 더 강하게 막아뒀는데(드래그 제스처 자체가 없어서 pan도 필요 없음), 보드 바깥의
+     나머지 화면(버튼/채팅/대기실 등)은 이 규칙이 없으면 여전히 줌 제스처가 먹힌다. */
+  touch-action: manipulation;
 }
 
 h1,
