@@ -66,14 +66,37 @@ npm run build  # tsc -b && vite build
 - **Colyseus `sessionId`는 하이픈(`-`)을 포함할 수 있다** — `pieceId`(`` `${sessionId}-${i}` ``)에서 말 번호를 뽑을 때 `split("-")[1]`을 쓰면 깨진다. 항상 `split("-").pop()`(마지막 조각)을 쓸 것. (`docs/TROUBLESHOOTING.md` #10)
 - **알려진 한계, 고치지 않기로 함**: 대기 중인 말 표시는 `PlayerCorner`가 `assignCorners`(`client/src/game/cornerSlots.ts`, `room.state.turnOrder` 기반으로 모서리 배치)로 결정된 모서리 카드 안에서 그린다. 연결이 끊긴 플레이어라도 `turnOrder`에 남아 있는 한 모서리 자체는 배정되지만, 그 플레이어의 팀 정보(`players.get(...).team`)가 비어 있으면 말 색상 등 표시가 무너질 수 있다(서버 상태 자체는 정상, 클라이언트 표시만 영향받는 것). 재접속/이탈 정책을 별도로 만들지 않기로 한 결정과 같은 맥락 — 필요해지면 그때 다시 설계할 것.
 
-## 배포 (2026-08-27~, 진행 중)
+## 배포
 
-songpyeon과 동일한 방식(EC2 단일 인스턴스 + Docker + Caddy 리버스 프록시, nip.io 무료 주소, CI/CD 없이 수동 재배포)으로 배포를 준비 중이다.
+songpyeon과 동일한 방식 — **EC2 단일 인스턴스 + Docker + Caddy 리버스 프록시, nip.io 무료 주소, CI/CD 없이 수동 재배포** — 로 배포되어 있다.
 
-- **루트 `Dockerfile`**: 2단계 빌드. 1단계는 `npm ci` 후 client만 빌드(server는 `tsx`로 TS를 그대로 실행하므로 빌드 불필요, `server/package.json`의 `start` 스크립트가 이미 `tsx src/index.ts`). 2단계는 server 소스 + node_modules + client 빌드 결과(`client/dist` → `server/public`)만 담은 런타임 이미지. `docker build -t yutnori:test .` → `docker run -p 2567:2567 yutnori:test`로 로컬 검증 완료(실제 브라우저로 닉네임→방 목록→방 생성→대기실까지 확인, 웹소켓 정상 동작).
+- **루트 `Dockerfile`**: 2단계 빌드. 1단계는 `npm ci` 후 client만 빌드(server는 `tsx`로 TS를 그대로 실행하므로 빌드 불필요, `server/package.json`의 `start` 스크립트가 이미 `tsx src/index.ts`). 2단계는 server 소스 + node_modules + client 빌드 결과(`client/dist` → `server/public`)만 담은 런타임 이미지.
 - **`server/src/createServer.ts`가 프로덕션에서 client 정적 파일도 서빙**한다 — `server/public/index.html`이 존재할 때만(개발 중엔 없음, 그때는 Vite가 5173에서 따로 서빙) `express.static` + SPA catch-all(`app.get("*", ...)`)을 등록한다. `/api/rooms`보다 뒤에 등록해야 그 라우트를 안 가린다. Colyseus의 웹소켓 업그레이드는 Express 라우팅이 아니라 httpServer의 `upgrade` 이벤트에서 직접 처리되므로 이 catch-all과 충돌하지 않는다.
-- **`client/src/colyseus.ts`의 `wsUrl`은 프로덕션에서 같은 origin으로 접속**한다(`${protocol}://${location.host}`) — nip.io 주소는 EC2를 재시작할 때마다 바뀌므로(songpyeon 배포 기록 참고), 빌드에 고정 주소를 박아넣으면 재시작마다 재빌드가 필요해진다. `VITE_COLYSEUS_URL` env는 개발 중 client(5173)/server(2567)를 분리해서 띄울 때만 필요. **주의**: 이 값은 `??`가 아니라 `||`로 폴백해야 한다 — Docker `ARG`를 안 넘기면 `""`(빈 문자열, undefined 아님)로 정의되어 `??`로는 안 걸러진다(실제로 이 버그로 `new Client("")`가 "Invalid URL" 에러를 던지는 걸 로컬 브라우저 테스트에서 잡았다).
-- **아직 안 한 것**: 실제 EC2 인스턴스 생성/Caddy 설정/scp 재배포 절차. 끝나면 이 절 아래에 songpyeon 스타일로 상세 기록할 것(주소는 재시작마다 바뀌므로 "최근 확인 시점" 명시 필수).
+- **`client/src/colyseus.ts`의 `wsUrl`은 프로덕션에서 같은 origin으로 접속**한다(`${protocol}://${location.host}`) — nip.io 주소는 EC2를 재시작할 때마다 바뀌므로(아래 참고), 빌드에 고정 주소를 박아넣으면 재시작마다 재빌드가 필요해진다. `VITE_COLYSEUS_URL` env는 개발 중 client(5173)/server(2567)를 분리해서 띄울 때만 필요. **주의**: 이 값은 `??`가 아니라 `||`로 폴백해야 한다 — Docker `ARG`를 안 넘기면 `""`(빈 문자열, undefined 아님)로 정의되어 `??`로는 안 걸러진다(실제로 이 버그로 `new Client("")`가 "Invalid URL" 에러를 던지는 걸 로컬 브라우저 테스트에서 잡았다).
+
+**첫 배포 완료(2026-08-27), 인프라 세팅:**
+- EC2: Amazon Linux 2023, 서울 리전(ap-northeast-2), 키페어 `yutnori.pem`(워크스페이스 루트, songpyeon.pem과 동일한 위치 관례). 보안 그룹은 songpyeon 것을 그대로 재사용(SSH 22/내 IP, HTTP 80/Anywhere, HTTPS 443/Anywhere — 앱마다 다를 이유가 없는 범용 규칙이라 공유해도 무방).
+- 도커 네트워크 `yutnori-net` 하나에 `caddy`(공식 `caddy:2` 이미지, `-p 80:80 -p 443:443`, Caddyfile을 `/home/ec2-user/caddy/Caddyfile`에서 바인드 마운트)와 `yutnori`(우리 앱, 호스트 포트 노출 없이 캐디가 내부 네트워크로만 접근) 두 컨테이너가 떠 있다. 둘 다 `--restart unless-stopped`.
+- Caddyfile: `<현재 EC2 IP를 하이픈으로 바꾼 값>.nip.io { reverse_proxy yutnori:2567 }` — Caddy가 컨테이너 이름 `yutnori`를 도커 내장 DNS(127.0.0.11)로 해석해서 프록시한다.
+
+**재배포 절차(songpyeon과 동일):**
+```
+# 로컬(워크스페이스 루트)
+cd yutnori && docker build -t yutnori:latest .
+cd .. && docker save yutnori:latest -o yutnori.tar
+scp -i yutnori.pem yutnori.tar ec2-user@<EC2 IP>:~/
+
+# 서버(SSH)
+docker load -i ~/yutnori.tar
+docker stop yutnori && docker rm yutnori
+docker run -d --name yutnori --network yutnori-net --restart unless-stopped yutnori:latest
+rm ~/yutnori.tar
+```
+`caddy`/`yutnori-net`은 그대로 두고 앱 컨테이너만 교체한다. 이미지 레지스트리 없이 `docker save`→`scp`→`docker load`로 직접 옮기는 것도 songpyeon과 동일.
+
+**EC2 재시작 시 반드시 해야 할 일(songpyeon과 동일한 함정)**: EC2를 재시작(중지→시작)하면 **퍼블릭 IP가 바뀐다** — nip.io는 IP를 그대로 호스트명에 박아 쓰므로 주소 전체(`https://<IP>.nip.io`)가 바뀐다. 재시작 후에는 `/home/ec2-user/caddy/Caddyfile`의 호스트명을 새 IP로 고쳐 쓰고 `docker restart caddy`를 해줘야 새 IP용 인증서를 다시 발급받는다 — 안 하면 컨테이너는 다 떠 있어도 새 주소가 아무 응답도 안 한다.
+
+**주소는 EC2 상태에 따라 바뀔 수 있으니, 아래 값을 최신으로 믿지 말고 항상 접속 확인부터 할 것.**
 
 ## Key docs
 
@@ -88,4 +111,4 @@ songpyeon과 동일한 방식(EC2 단일 인스턴스 + Docker + Caddy 리버스
 - 클라이언트는 테스트 프레임워크 없이 `npm run build` + 실제 브라우저 확인으로 검증(위 Commands 참고).
 - 구현은 subagent-driven-development(브레인스토밍 → 계획 문서 → 태스크별 서브에이전트 구현+리뷰 → 전체 브랜치 최종 리뷰)로 진행해왔음, `main`에 직접 커밋(songpyeon과 동일 관례, 별도 브랜치/PR 안 씀).
 - 커밋 메시지는 한국어로, `feat:`/`fix:` 같은 프리픽스 없이 작성.
-- REQUIREMENTS.md 범위 내 기능(서버 엔진, 대기실/플레이 UI, 게이지·Matter.js 던지기 연출, 채팅/말풍선, 캐릭터 능력, 1v1 모드, 지름길 정확 모델 — 5↔15번 실제 교차, 실제 윷판 모양 시각화, 말 이동 애니메이션)은 전부 구현 완료. 남은 후보는 배포 방식 결정(REQUIREMENTS.md §11) 정도. 15번 모서리는 진짜 교차를 적용하면 완주에서 오히려 크게 손해라 지름길 후보에서 아예 제외했다(2026-08-27) — 위 "보드 좌표계" 절 참고, 이미 사용자와 함께 결정 끝난 사안.
+- REQUIREMENTS.md 범위 내 기능(서버 엔진, 대기실/플레이 UI, 게이지·Matter.js 던지기 연출, 채팅/말풍선, 캐릭터 능력, 1v1 모드, 지름길 정확 모델 — 5↔15번 실제 교차, 실제 윷판 모양 시각화, 말 이동 애니메이션)과 배포(2026-08-27, EC2+Docker+Caddy)까지 전부 완료. 15번 모서리는 진짜 교차를 적용하면 완주에서 오히려 크게 손해라 지름길 후보에서 아예 제외했다(2026-08-27) — 위 "보드 좌표계" 절 참고, 이미 사용자와 함께 결정 끝난 사안.
