@@ -14,9 +14,11 @@ function groupKey(piece: PieceState): string {
   return `${piece.positionKind}:${piece.positionIndex}`;
 }
 
-/** 지름길 대각선 4개(5/10/15번 진입 + 중앙→출발점 진출) 위의 중간칸 좌표 — 외곽 칸과 동일한 점 마커로 그린다. */
+/** 지름길 대각선(5/10번 진입 + 중앙→출발점 진출) 위의 중간칸 좌표 — 외곽 칸과 동일한 점
+ * 마커로 그린다. 15번은 2026-08-27부터 지름길 후보가 아니라서(완주에서 오히려 손해) 제외한다
+ * — shortcutIn15는 이제 절대 도달하지 않는 상태다. */
 const SHORTCUT_DOTS: { key: string; kind: PositionKind; index: number }[] = [
-  ...([5, 10, 15] as const).flatMap((junction) =>
+  ...([5, 10] as const).flatMap((junction) =>
     ([1, 2] as const).map((step) => ({
       key: `shortcutIn${junction}-${step}`,
       kind: `shortcutIn${junction}` as PositionKind,
@@ -159,7 +161,9 @@ export function GameBoard({
           height={CORNERS[3].y - CORNERS[1].y}
           className={styles.track}
         />
-        {[5, 10, 15].map((junction) => {
+        {/* 15번은 2026-08-27부터 지름길이 없어서 대각선을 그리지 않는다 — 실제로 갈 수 없는
+            길을 보드에 표시하면 안 된다. */}
+        {[5, 10].map((junction) => {
           const corner = CORNERS[JUNCTION_CORNER[junction as 5 | 10 | 15]];
           return (
             <line

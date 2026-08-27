@@ -7,7 +7,15 @@ export type Position =
   | { kind: "shortcutCross"; step: 1 | 2 }
   | { kind: "finished" };
 
-export const SHORTCUT_JUNCTIONS: ReadonlySet<number> = new Set([5, 10, 15]);
+// 15번은 지름길 후보에서 제외한다(2026-08-27 변경, 사용자 명시 요청) — 진짜 교차 모델대로면
+// 15번에서 타면 5번으로 떨어져 완주에서 오히려 손해고(위 2026-08-24 예외 처리로 finish 방향을
+// 유지하게 했었지만, 그래도 바깥길 그대로 가는 것보다 1칸 더 걸려 이득이 없었다 — 15+shortcut=
+// 6칸 vs 바깥길 그대로=5칸), 그래서 아예 선택지 자체를 없앴다. 15번에 있는 말은 이제 useShortcut
+// 값과 무관하게 항상 바깥길을 그대로 간다. `shortcutIn`의 `junction: 5 | 10 | 15` 타입과 그
+// 이어가기 로직은 그대로 남겨뒀다(junction 값과 무관하게 동작하는 범용 코드라 해가 없고,
+// 지우면 여러 파일에 걸친 타입 변경이 필요해 배보다 배꼽이 커진다) — 다만 이제 15로는 그
+// 상태 자체에 절대 도달하지 않는다.
+export const SHORTCUT_JUNCTIONS: ReadonlySet<number> = new Set([5, 10]);
 
 const LAST_OUTER_INDEX = 19;
 

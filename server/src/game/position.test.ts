@@ -57,9 +57,15 @@ describe("moveForward", () => {
       expect(result).toEqual({ kind: "center", exitVia: "cross" });
     });
 
-    it("10번/15번에서 3칸(걸)이면 중앙에 도착하고 finish 트랙으로 기록된다(기존 동작 유지)", () => {
+    it("10번에서 3칸(걸)이면 중앙에 도착하고 finish 트랙으로 기록된다(기존 동작 유지)", () => {
       expect(moveForward({ kind: "outer", index: 10 }, 3, true)).toEqual({ kind: "center", exitVia: "finish" });
-      expect(moveForward({ kind: "outer", index: 15 }, 3, true)).toEqual({ kind: "center", exitVia: "finish" });
+    });
+
+    it("15번은 useShortcut=true를 줘도 지름길이 없다 — 그냥 바깥길로 3칸(걸)(2026-08-27 변경)", () => {
+      // 진짜 교차 모델대로면 5번으로 떨어지고, 기존 예외(finish 방향 유지)대로면 6칸 걸려
+      // 바깥길 그대로(5칸)보다 오히려 손해라 아예 선택지를 없앴다 — 위 SHORTCUT_JUNCTIONS 참고.
+      const result = moveForward({ kind: "outer", index: 15 }, 3, true);
+      expect(result).toEqual({ kind: "outer", index: 18 });
     });
 
     it("5번에서 4칸(윷)이면 shortcutCross 1단계다(shortcutOut이 아님)", () => {
@@ -78,8 +84,20 @@ describe("moveForward", () => {
     });
 
     it("5칸(모)이면 shortcutOut 2단계", () => {
-      const result = moveForward({ kind: "outer", index: 15 }, 5, true);
+      const result = moveForward({ kind: "outer", index: 10 }, 5, true);
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
+    });
+
+    it("15번에서 5칸(모)은 지름길이 없어 그냥 바깥길로 가서 완주한다(15+5=20, 2026-08-27 변경)", () => {
+      const result = moveForward({ kind: "outer", index: 15 }, 5, true);
+      expect(result).toEqual({ kind: "finished" });
+    });
+
+    it("15번은 useShortcut을 true/false 어느 쪽으로 줘도 결과가 같다(2026-08-27 변경)", () => {
+      const withShortcut = moveForward({ kind: "outer", index: 15 }, 2, true);
+      const withoutShortcut = moveForward({ kind: "outer", index: 15 }, 2, false);
+      expect(withShortcut).toEqual(withoutShortcut);
+      expect(withShortcut).toEqual({ kind: "outer", index: 17 });
     });
 
     it("서로 다른 모서리에서 탄 shortcutIn은 junction이 다르게 기록된다", () => {

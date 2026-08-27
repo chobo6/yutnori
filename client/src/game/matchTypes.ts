@@ -79,5 +79,6 @@ export const YUT_STEPS: Record<string, number> = {
   [GYOJU_BONUS_RESULT]: 1,
 };
 
-// server/src/game/position.ts의 SHORTCUT_JUNCTIONS(5, 10, 15)와 동일.
-export const SHORTCUT_JUNCTION_INDICES = new Set([5, 10, 15]);
+// server/src/game/position.ts의 SHORTCUT_JUNCTIONS(5, 10)와 동일 — 15번은 2026-08-27에
+// 지름길 후보에서 제외됐다(완주에서 오히려 손해라 선택지 자체를 없앰).
+export const SHORTCUT_JUNCTION_INDICES = new Set([5, 10]);
