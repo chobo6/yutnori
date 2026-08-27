@@ -6,7 +6,7 @@
  * 값을 따르며(ARCHITECTURE.md §2 서버 권위형 원칙), 여기 계산값을 서버 판정 대신 신뢰하면 안 된다.
  */
 
-export const DEFAULT_GAUGE_CYCLE_MS = 1500;
+export const DEFAULT_GAUGE_CYCLE_MS = 1000;
 
 /** elapsedMs를 cycleMs 주기의 삼각파(0->1->0)로 변환한다. server/src/game/gauge.ts의 wavePosition과 동일. */
 export function wavePosition(elapsedMs: number, cycleMs: number = DEFAULT_GAUGE_CYCLE_MS): number {
@@ -22,13 +22,15 @@ export interface GaugeZone {
   color: string;
 }
 
-// server/src/game/gauge.ts의 ZONES와 순서/경계값 동일 (REQUIREMENTS.md §5).
+// server/src/game/gauge.ts의 ZONES와 순서/경계값 동일 (REQUIREMENTS.md §5). 왼쪽 "도"에서
+// 시작해 오른쪽 "모"로 차오르도록 2026-08-25에 순서를 뒤집었다(사용자 요청) — value=0(누르자마자
+// 놓음)이 도, value=1(정점까지 오래 누름)이 모.
 // 빽도는 이제 게이지 zone이 아니라 "도" 판정 후 서버가 별도 확률로 재판정하므로(2026-08-24),
 // 게이지 막대에는 표시하지 않는다 — 타이밍으로 노릴 수 없다는 걸 시각적으로도 드러낸다.
 export const GAUGE_ZONES: GaugeZone[] = [
-  { result: "mo", label: "모", upperBound: 0.0625, color: "#c0392b" },
-  { result: "yut", label: "윷", upperBound: 0.125, color: "#8e44ad" },
-  { result: "geol", label: "걸", upperBound: 0.375, color: "#2980b9" },
-  { result: "gae", label: "개", upperBound: 0.75, color: "#27ae60" },
-  { result: "do", label: "도", upperBound: 1.0, color: "#7f8c8d" },
+  { result: "do", label: "도", upperBound: 0.25, color: "#7f8c8d" },
+  { result: "gae", label: "개", upperBound: 0.625, color: "#27ae60" },
+  { result: "geol", label: "걸", upperBound: 0.875, color: "#2980b9" },
+  { result: "yut", label: "윷", upperBound: 0.9375, color: "#8e44ad" },
+  { result: "mo", label: "모", upperBound: 1.0, color: "#c0392b" },
 ];

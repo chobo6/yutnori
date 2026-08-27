@@ -22,13 +22,13 @@ export function GaugeBar({ startedAt }: { startedAt: number }) {
 
   let cumulative = 0;
 
-  // 실제 구간 경계값(GAUGE_ZONES의 upperBound)은 서버 판정과 동일하게 유지해야 하므로 손대지
-  // 않는다 — 화면에 "도개걸윷모" 순서로 보이도록 좌우만 뒤집는다(value=0을 오른쪽 끝에,
-  // value=1을 왼쪽 끝에 그림). 바늘 위치도 같은 방식으로 뒤집어야 실제 게이지 값과 계속 맞는다.
+  // GAUGE_ZONES가 이미 "도개걸윷모" 순서(=value 오름차순)라서 뒤집지 않고 그대로 왼쪽부터
+  // 그리면 된다 — 바늘도 value를 그대로 좌표로 쓰면 왼쪽 "도"에서 시작해 오른쪽 "모"로
+  // 움직인다(2026-08-25, 사용자 요청).
   return (
     <div className={styles.track}>
       {GAUGE_ZONES.map((zone) => {
-        const left = (1 - zone.upperBound) * 100;
+        const left = cumulative * 100;
         const width = (zone.upperBound - cumulative) * 100;
         cumulative = zone.upperBound;
         return (
@@ -39,7 +39,7 @@ export function GaugeBar({ startedAt }: { startedAt: number }) {
           />
         );
       })}
-      <div className={styles.needle} style={{ left: `${(1 - value) * 100}%` }} />
+      <div className={styles.needle} style={{ left: `${value * 100}%` }} />
     </div>
   );
 }

@@ -8,8 +8,22 @@ function flush(ms = 20) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** wavePosition 상승 초입 근처를 노려 "모"(5칸) 결과를 안정적으로 얻는다 — 기존 테스트와 동일한 관례. */
-const MO_TIMING_MS = 5;
+/** 매 호출마다 다음 값을 순서대로 반환하고, 다 쓰면 마지막 값을 계속 반환하는 결정적 rng.
+ * 던지기 확인 확률(게이지 확인/재판정, 2026-08-25~)과 능력 확률 판정이 같은 room.rng를
+ * 공유하므로, "던지기는 항상 확정 성공 + 그 이후 능력 판정은 항상 실패"처럼 단계별로 다른
+ * 값이 필요한 테스트에 쓴다(flat 상수 하나로는 표현 불가능한 조합). */
+function sequence(...values: number[]): () => number {
+  let i = 0;
+  return () => values[Math.min(i++, values.length - 1)];
+}
+
+/** wavePosition 정점 근처(게이지가 왼쪽 "도"에서 오른쪽 "모"로 차오르므로, 2026-08-25~)를
+ * 노려 "모"(5칸) 결과를 안정적으로 얻는다. 이 파일 대부분의 테스트가 rng:()=>0 또는
+ * rng:()=>0.37을 쓰는데 둘 다 확인 확률(모/윷 60%, 도/개/걸 70%)보다 작아 재판정 없이 그대로
+ * 확정되지만, "능력 판정을 전부 실패시키는" 0.99 하나는 확인 확률 자체를 넘겨(재판정을
+ * 유발하고, 재판정 결과도 우연히 항상 "모"가 되어) 두 번째("개") 던지기까지 덮어써버리므로
+ * 그 테스트들만 sequence()로 던지기 확인은 성공시키고 능력 판정만 실패시킨다. */
+const MO_TIMING_MS = 485;
 // "모"는 이제 이동 없이 즉시 재던지기를 유발하므로(연속 던지기 규칙), 매번 "개" 결과로 한 번 더
 // 던져 이동 가능 상태로 만든 뒤 첫 번째("모") 패를 골라 쓴다.
 
@@ -87,7 +101,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -108,7 +122,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
         ["마담", "의사"],
         ["마담", "의사"],
       ],
-      { rng: () => 0.99 }, // 모든 확률 판정 실패
+      { rng: sequence(0.5, 0.5, 0.99) }, // 던지기 확인은 성공(모->개 순서 그대로), 능력 판정은 전부 실패
     );
 
     const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
@@ -121,7 +135,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -157,7 +171,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -194,7 +208,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -234,7 +248,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -254,7 +268,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
         ["의사", "성직"],
         ["의사", "성직"],
       ],
-      { rng: () => 0.99 }, // 둘 다 실패
+      { rng: sequence(0.5, 0.5, 0.99) }, // 던지기 확인은 성공(모->개 순서 그대로), 능력 판정은 둘 다 실패
     );
 
     const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
@@ -274,7 +288,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -313,7 +327,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패를 쓴다
@@ -362,7 +376,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
 
@@ -421,7 +435,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(200); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패로 잡기
@@ -467,7 +481,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375);
+    await flush(200);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id });
@@ -503,7 +517,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375);
+    await flush(200);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
@@ -543,7 +557,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375);
+    await flush(200);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
@@ -576,7 +590,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, allyId, 2); // 업기 발생 -> 걸(3칸)로 도착 칸이 정확히 5번(지름길 모서리)
 
     moverClient.send("throwStart", {});
-    await flush(188); // "걸" 구간
+    await flush(375); // "걸" 구간
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
@@ -629,7 +643,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, allyId, 2);
 
     moverClient.send("throwStart", {});
-    await flush(188);
+    await flush(375);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
@@ -664,7 +678,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, allyId, 5); // 업기 발생
 
     moverClient.send("throwStart", {});
-    await flush(188); // "걸"(3칸) 구간
+    await flush(375); // "걸"(3칸) 구간
     moverClient.send("throwRelease", {});
     await flush();
     // 지름길(useShortcut:true)로 3칸 이동 -> 5번+지름길+3칸 = 정확히 중앙(centerCross)
@@ -721,7 +735,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     placeAt(room, allyId, 5);
 
     moverClient.send("throwStart", {});
-    await flush(188);
+    await flush(375);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", {
@@ -770,7 +784,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375);
+    await flush(200);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
@@ -806,7 +820,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("throwStart", {});
-    await flush(375);
+    await flush(200);
     moverClient.send("throwRelease", {});
     await flush();
     moverClient.send("movePiece", { pieceId: `${sessionId}-0`, resultId: room.state.pendingResults[0].id });
