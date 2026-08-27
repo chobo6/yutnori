@@ -1,8 +1,17 @@
 import express from "express";
 import { createServer as createHttpServer } from "http";
+import { existsSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { MatchRoom } from "./rooms/MatchRoom";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** 프로덕션 Docker 이미지에서 client의 빌드 결과(client/dist)를 여기로 복사해 넣는다(Dockerfile
+ * 참고). 개발 환경(`npm run dev`)에서는 이 폴더가 없으므로 정적 서빙 자체를 건너뛴다 — client는
+ * 그때 Vite(5173)가 별도로 서빙한다. */
+const clientDistPath = path.join(__dirname, "../public");
 
 export function createGameServer() {
   const app = express();
@@ -30,6 +39,16 @@ export function createGameServer() {
       })),
     );
   });
+
+  // 프로덕션 배포용: client 정적 파일 서빙 + SPA catch-all. /api/rooms보다 뒤에 등록해야
+  // 그 라우트를 가리지 않는다. Colyseus의 웹소켓 업그레이드는 Express 라우팅이 아니라
+  // httpServer의 'upgrade' 이벤트에서 직접 처리되므로 이 catch-all과 충돌하지 않는다.
+  if (existsSync(path.join(clientDistPath, "index.html"))) {
+    app.use(express.static(clientDistPath));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(clientDistPath, "index.html"));
+    });
+  }
 
   return gameServer;
 }

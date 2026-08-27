@@ -66,6 +66,15 @@ npm run build  # tsc -b && vite build
 - **Colyseus `sessionId`는 하이픈(`-`)을 포함할 수 있다** — `pieceId`(`` `${sessionId}-${i}` ``)에서 말 번호를 뽑을 때 `split("-")[1]`을 쓰면 깨진다. 항상 `split("-").pop()`(마지막 조각)을 쓸 것. (`docs/TROUBLESHOOTING.md` #10)
 - **알려진 한계, 고치지 않기로 함**: 대기 중인 말 표시는 `PlayerCorner`가 `assignCorners`(`client/src/game/cornerSlots.ts`, `room.state.turnOrder` 기반으로 모서리 배치)로 결정된 모서리 카드 안에서 그린다. 연결이 끊긴 플레이어라도 `turnOrder`에 남아 있는 한 모서리 자체는 배정되지만, 그 플레이어의 팀 정보(`players.get(...).team`)가 비어 있으면 말 색상 등 표시가 무너질 수 있다(서버 상태 자체는 정상, 클라이언트 표시만 영향받는 것). 재접속/이탈 정책을 별도로 만들지 않기로 한 결정과 같은 맥락 — 필요해지면 그때 다시 설계할 것.
 
+## 배포 (2026-08-27~, 진행 중)
+
+songpyeon과 동일한 방식(EC2 단일 인스턴스 + Docker + Caddy 리버스 프록시, nip.io 무료 주소, CI/CD 없이 수동 재배포)으로 배포를 준비 중이다.
+
+- **루트 `Dockerfile`**: 2단계 빌드. 1단계는 `npm ci` 후 client만 빌드(server는 `tsx`로 TS를 그대로 실행하므로 빌드 불필요, `server/package.json`의 `start` 스크립트가 이미 `tsx src/index.ts`). 2단계는 server 소스 + node_modules + client 빌드 결과(`client/dist` → `server/public`)만 담은 런타임 이미지. `docker build -t yutnori:test .` → `docker run -p 2567:2567 yutnori:test`로 로컬 검증 완료(실제 브라우저로 닉네임→방 목록→방 생성→대기실까지 확인, 웹소켓 정상 동작).
+- **`server/src/createServer.ts`가 프로덕션에서 client 정적 파일도 서빙**한다 — `server/public/index.html`이 존재할 때만(개발 중엔 없음, 그때는 Vite가 5173에서 따로 서빙) `express.static` + SPA catch-all(`app.get("*", ...)`)을 등록한다. `/api/rooms`보다 뒤에 등록해야 그 라우트를 안 가린다. Colyseus의 웹소켓 업그레이드는 Express 라우팅이 아니라 httpServer의 `upgrade` 이벤트에서 직접 처리되므로 이 catch-all과 충돌하지 않는다.
+- **`client/src/colyseus.ts`의 `wsUrl`은 프로덕션에서 같은 origin으로 접속**한다(`${protocol}://${location.host}`) — nip.io 주소는 EC2를 재시작할 때마다 바뀌므로(songpyeon 배포 기록 참고), 빌드에 고정 주소를 박아넣으면 재시작마다 재빌드가 필요해진다. `VITE_COLYSEUS_URL` env는 개발 중 client(5173)/server(2567)를 분리해서 띄울 때만 필요. **주의**: 이 값은 `??`가 아니라 `||`로 폴백해야 한다 — Docker `ARG`를 안 넘기면 `""`(빈 문자열, undefined 아님)로 정의되어 `??`로는 안 걸러진다(실제로 이 버그로 `new Client("")`가 "Invalid URL" 에러를 던지는 걸 로컬 브라우저 테스트에서 잡았다).
+- **아직 안 한 것**: 실제 EC2 인스턴스 생성/Caddy 설정/scp 재배포 절차. 끝나면 이 절 아래에 songpyeon 스타일로 상세 기록할 것(주소는 재시작마다 바뀌므로 "최근 확인 시점" 명시 필수).
+
 ## Key docs
 
 - `docs/REQUIREMENTS.md` (v0.5) — 게임 규칙 명세. 1차 소스는 사용자의 직접 설명 + 참고 영상(마피아42 실제 인게임 화면) 확인 결과.
