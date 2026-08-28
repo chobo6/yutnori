@@ -32,3 +32,38 @@
 .boardArea {
   grid-area: board;
 }
+
+/* 좁은 화면(대략 세로 모드 휴대폰 폭 이하)에서는 보드(width: min(90vw, 480px), GameBoard.module.css)와
+ * 양옆 플레이어 코너가 그리드에서 같은 열 트랙을 공유해서, 코너의 최소 너비(PlayerCorner.module.css
+ * .card min-width: 90px)까지 합치면 화면 너비를 넘겨버려 레이아웃 전체가 한쪽으로 밀리는 문제가
+ * 있었다(2026-08-28 발견 — 보드가 오른쪽으로 밀림) — 90vw가 480px보다 작아지는 지점(뷰포트
+ * 533px 근방)부터 보드가 화면 대부분을 차지하기 시작해 옆 여백이 코너 최소 너비보다 좁아진다.
+ * 이 폭 이하에서는 그리드 대신 세로로 쌓아서 폭 방향 경쟁 자체를 없앤다. */
+@media (max-width: 600px) {
+  .playScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem;
+  }
+
+  .topLeft {
+    order: 1;
+  }
+
+  .topRight {
+    order: 2;
+  }
+
+  .boardArea {
+    order: 3;
+  }
+
+  .bottomLeft {
+    order: 4;
+  }
+
+  .bottomRight {
+    order: 5;
+  }
+}
