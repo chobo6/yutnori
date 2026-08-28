@@ -17,12 +17,17 @@ export type Position =
 // 상태 자체에 절대 도달하지 않는다.
 export const SHORTCUT_JUNCTIONS: ReadonlySet<number> = new Set([5, 10]);
 
-const LAST_OUTER_INDEX = 19;
+// 도착점(외곽 20번, 시작점과 물리적으로 같은 모서리 칸)에 "정확히 도착"만 해서는 완주하지
+// 않는다(2026-08-28 변경, 사용자 명시 요청) — 그 칸에 멈춰 선 뒤, 다음 이동으로 한 칸이라도
+// 더 나가야 비로소 완주(finished)한다. 그래서 바깥길의 마지막 유효 칸이 19에서 20으로
+// 늘었다 — 20은 실제로 밟고 멈춰 설 수 있는 평범한 outer 칸이고(같은 이유로 업기/잡기 판정도
+// 다른 칸과 동일하게 그대로 적용된다), 21 이상으로 넘어가는 순간에만 finished가 된다.
+const LAST_OUTER_INDEX = 20;
 
 /**
  * "finish" 트랙(10번/15번 진입, 항상 완주 방향으로 나감) 경로를 "모서리를 절대값 0으로 하는
- * 6칸짜리 트랙"으로 계산한다. 0=모서리, 1~2=shortcutIn, 3=center(exitVia:"finish"), 4~5=shortcutOut,
- * 6 이상=finished.
+ * 7칸짜리 트랙"으로 계산한다. 0=모서리, 1~2=shortcutIn, 3=center(exitVia:"finish"), 4~5=shortcutOut,
+ * 6=도착점(외곽 20번 — 정확히 도착만 하면 아직 완주 아님), 7 이상=finished.
  */
 function shortcutPositionFromAbsolute(junction: 5 | 10 | 15 | null, absoluteStep: number): Position {
   if (absoluteStep < 1) {
@@ -40,13 +45,18 @@ function shortcutPositionFromAbsolute(junction: 5 | 10 | 15 | null, absoluteStep
   if (absoluteStep <= 5) {
     return { kind: "shortcutOut", step: (absoluteStep - 3) as 1 | 2 };
   }
+  if (absoluteStep === 6) {
+    return { kind: "outer", index: LAST_OUTER_INDEX };
+  }
   return { kind: "finished" };
 }
 
 /**
  * "cross" 트랙(5번 진입 전용, 실제로 15번 쪽으로 건너간다) 경로 — 같은 절대값 체계를 쓰되
  * 6 이상은 finished가 아니라 외곽 15번 칸(그리고 그 이후는 평범한 바깥길)으로 이어진다.
- * docs/superpowers/specs/2026-08-24-real-diagonal-crossing-design.md §2 참고.
+ * docs/superpowers/specs/2026-08-24-real-diagonal-crossing-design.md §2 참고. 바깥길에
+ * 합류한 뒤로는 위 LAST_OUTER_INDEX(20, 도착점) 규칙을 그대로 따른다 — 정확히 20번에
+ * 도착하면 멈춰 서고, 21 이상으로 넘어가야 완주한다.
  */
 function crossPositionFromAbsolute(absoluteStep: number): Position {
   if (absoluteStep < 1) {
@@ -113,6 +123,8 @@ export function moveForward(from: Position, steps: number, useShortcut: boolean)
   const startIndex = from.kind === "start" ? 0 : from.index;
   const nextIndex = startIndex + steps;
 
+  // 정확히 도착점(20번)에 도착하면 완주가 아니라 그냥 그 칸에 멈춰 선다 — 다음 이동으로 한
+  // 칸이라도 더 나가야(21 이상) 완주한다(2026-08-28 변경).
   if (nextIndex > LAST_OUTER_INDEX) {
     return { kind: "finished" };
   }
@@ -136,12 +148,14 @@ const SIDE_RANGES: Array<{ side: Side; min: number; max: number }> = [
   { side: "A", min: 1, max: 5 },
   { side: "B", min: 6, max: 10 },
   { side: "C", min: 11, max: 15 },
-  { side: "D", min: 16, max: 19 },
+  { side: "D", min: 16, max: 20 },
 ];
 
 /**
  * 보드를 4개의 "변"으로 나눈다(캐릭터 능력의 "같은 줄" 판정용). outer가 아닌 모든 위치
  * (start/center/finished/shortcutIn/shortcutOut/shortcutCross)는 어느 변에도 속하지 않는다.
+ * 20번(도착점)은 기존 5/10/15번 모서리와 같은 맥락으로 그 변(D)에 포함시킨다 — 물리적으로
+ * 도착점 칸이지만 완주 전까지는(2026-08-28 변경) 평범한 outer 칸과 동일하게 취급한다.
  */
 export function sideOf(position: Position): Side | null {
   if (position.kind !== "outer") return null;

@@ -68,8 +68,10 @@ describe("MatchRoom 지름길 통합", () => {
     // 10번 모서리 + 모(5칸) 지름길 = 절대값 0+5=5 → shortcutOut 2단계(5-3=2)
     expect(moved.positionKind).toBe("shortcutOut");
     expect(moved.positionIndex).toBe(2);
-    // 직전 위치(이동 전 모서리 10번)가 스키마 왕복 변환을 거쳐도 올바르게 보존되어야 한다
-    expect(moved.previousPositionKind).toBe("outer");
-    expect(moved.previousPositionIndex).toBe(10);
+    // previousPosition은 "이동 시작 전" 칸(10번)이 아니라 "착지 1칸 전" 칸이어야 빽도가 정확히
+    // 1칸만 되돌아간다(2026-08-28 버그 수정) — 절대값 4 → shortcutOut 1단계(4-3=1).
+    // 스키마 왕복 변환을 거쳐도 올바르게 보존되는지도 함께 확인한다.
+    expect(moved.previousPositionKind).toBe("shortcutOut");
+    expect(moved.previousPositionIndex).toBe(1);
   });
 });

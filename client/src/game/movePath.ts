@@ -9,7 +9,10 @@ import { SHORTCUT_JUNCTION_INDICES, type PositionKind } from "./matchTypes";
  * 어떤 경로로 갔는지"를 보여주기 위한 것일 뿐이다.
  */
 
-const LAST_OUTER_INDEX = 19;
+// server/src/game/position.ts와 동일(2026-08-28 변경) — 도착점(외곽 20번)에 정확히 도착만
+// 해서는 완주가 아니라 그냥 그 칸에 멈춰 선다. 다음 이동으로 한 칸이라도 더 나가야(21 이상)
+// 완주한다.
+const LAST_OUTER_INDEX = 20;
 
 export interface SimplePosition {
   kind: PositionKind;
@@ -21,6 +24,7 @@ function shortcutFromAbsolute(junctionKind: PositionKind, absoluteStep: number):
   if (absoluteStep <= 2) return { kind: junctionKind, index: absoluteStep };
   if (absoluteStep === 3) return { kind: "center", index: -1 };
   if (absoluteStep <= 5) return { kind: "shortcutOut", index: absoluteStep - 3 };
+  if (absoluteStep === 6) return { kind: "outer", index: LAST_OUTER_INDEX };
   return { kind: "finished", index: -1 };
 }
 

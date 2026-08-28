@@ -125,8 +125,10 @@ describe("applyGyojuBonus", () => {
     const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     const p2 = result.pieces.find((p) => p.id === "p2")!;
-    expect(p1.position).toEqual({ kind: "finished" }); // shortcutOut 2단계에서 1칸 더 가면 완주(3+2+1=6)
-    expect(p2.position).toEqual({ kind: "finished" });
+    // shortcutOut 2단계에서 1칸 더 가면(3+2+1=6) 도착점(외곽 20번)에 멈춰 선다 — 도착점 도착만으로는
+    // 아직 완주가 아니다(2026-08-28 변경).
+    expect(p1.position).toEqual({ kind: "outer", index: 20 });
+    expect(p2.position).toEqual({ kind: "outer", index: 20 });
   });
 
   it("상대 마담이 다른 줄이면 저지되지 않는다", () => {

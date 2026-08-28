@@ -46,6 +46,16 @@ export function applyMove(
       ? moveBackward(mover.position, mover.previousPosition)
       : moveForward(mover.position, steps, useShortcut);
 
+  // 빽도(-1)는 "직전 이동 전체를 되돌리기"가 아니라 REQUIREMENTS.md §7의 "-1칸"이어야 한다.
+  // steps가 2 이상인 이동 뒤에 previousPosition을 그냥 fromPosition(이동 시작 전 칸)으로
+  // 두면, 빽도가 그 이동 전체 칸수만큼(예: 개=2칸) 뒤로 가버리는 버그가 생긴다(2026-08-28
+  // 발견). "착지 1칸 전" 위치를 moveForward로 다시 계산해서 저장해야 정확히 1칸만 되돌아간다
+  // — moveForward가 이미 지름길/중앙 등 트랙 분기를 다 알고 있으므로 별도의 역방향 계산
+  // 함수 없이 재사용할 수 있다. steps가 1이면 "착지 1칸 전"이 곧 fromPosition이라 그대로 둔다.
+  // (알려진 한계: 이 이동 자체가 빽도(steps===-1)인 경우는 대상에서 뺐다 — 같은 말이 연속으로
+  // 두 번 빽도를 맞는 극히 드문 경우, 두 번째 빽도는 여전히 fromPosition으로 돌아간다.)
+  const newPreviousPosition = steps >= 2 ? moveForward(fromPosition, steps - 1, useShortcut) : fromPosition;
+
   // 같은 칸에 있던 같은 주인의 다른 말 (업기 대상)
   const piggybackIds = new Set(
     pieces
@@ -61,7 +71,7 @@ export function applyMove(
 
   const result = pieces.map((p) => {
     if (p.id === pieceId || piggybackIds.has(p.id)) {
-      return { ...p, position: newPosition, previousPosition: p.position };
+      return { ...p, position: newPosition, previousPosition: newPreviousPosition };
     }
     if (capturedSet.has(p.id)) {
       return { ...p, position: { kind: "start" as const }, previousPosition: p.position };

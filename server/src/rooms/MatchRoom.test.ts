@@ -790,11 +790,13 @@ describe("MatchRoom", () => {
       const winnerClient = clients.find((c) => c.sessionId === winnerSessionId)!;
       const winnerPieces = room.state.pieces.filter((p) => p.ownerSessionId === winnerSessionId);
       // 한 말은 이미 완주시켜두고, 나머지 한 말만 "도"(1칸) 한 번으로 완주하게 해서 턴이 다른
-      // 사람에게 넘어가기 전(한 번의 movePiece)에 승리 판정까지 끝나게 한다.
+      // 사람에게 넘어가기 전(한 번의 movePiece)에 승리 판정까지 끝나게 한다. 도착점(20번)에
+      // 정확히 도착만 해서는 완주가 아니므로(2026-08-28 변경), 이미 도착점에 있는 말이
+      // 한 칸 더 가서 완주하는 시나리오로 둔다.
       winnerPieces[0].positionKind = "finished";
       winnerPieces[0].positionIndex = -1;
       winnerPieces[1].positionKind = "outer";
-      winnerPieces[1].positionIndex = 19;
+      winnerPieces[1].positionIndex = 20;
 
       winnerClient.send("throwStart", {});
       await flush(DO_ELAPSED_MS);

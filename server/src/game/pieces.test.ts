@@ -22,10 +22,21 @@ describe("applyMove", () => {
     expect(result[0].position).toEqual({ kind: "outer", index: 5 });
   });
 
-  it("이동 후 previousPosition을 이동 전 위치로 갱신한다", () => {
+  it("이동 후 previousPosition은 '이동 시작 전' 칸이 아니라 '착지 1칸 전' 칸으로 갱신된다(빽도는 항상 -1칸이어야 하므로, 2026-08-28)", () => {
+    // 3에서 2칸(개) 이동해 5에 착지 — previousPosition은 이동을 시작한 3이 아니라 착지 1칸
+    // 전인 4여야 한다. 3으로 두면 나중에 빽도를 맞았을 때 2칸(개와 같은 칸수)을 되돌아가버려서
+    // REQUIREMENTS.md §7의 "빽도 -1칸"을 어기게 된다 — 실제로 신고된 버그.
     const pieces = [piece("p1", "alice", 3)];
     const { pieces: result } = applyMove(pieces, "p1", 2, false);
-    expect(result[0].previousPosition).toEqual({ kind: "outer", index: 3 });
+    expect(result[0].previousPosition).toEqual({ kind: "outer", index: 4 });
+  });
+
+  it("2칸 이동 후 빽도를 맞으면 그 이동 전체(2칸)가 아니라 정확히 1칸만 되돌아간다(2026-08-28 버그 수정)", () => {
+    const afterAdvance = applyMove([piece("p1", "alice", 3)], "p1", 2, false).pieces; // 3 -> 5
+    expect(afterAdvance[0].position).toEqual({ kind: "outer", index: 5 });
+
+    const afterBackDo = applyMove(afterAdvance, "p1", -1, false).pieces;
+    expect(afterBackDo[0].position).toEqual({ kind: "outer", index: 4 }); // 5에서 정확히 1칸 뒤
   });
 
   it("steps가 -1(빽도)이면 직전 위치로 되돌린다", () => {
@@ -53,11 +64,11 @@ describe("applyMove", () => {
     expect(p2.position).toEqual({ kind: "outer", index: 7 }); // 같이 이동
   });
 
-  it("함께 이동한 말도 previousPosition이 이동 전 위치로 갱신된다", () => {
+  it("함께 이동한 말도 previousPosition이 착지 1칸 전 위치로 갱신된다", () => {
     const pieces = [piece("p1", "alice", 5), piece("p2", "alice", 5)];
-    const { pieces: result } = applyMove(pieces, "p1", 2, false);
+    const { pieces: result } = applyMove(pieces, "p1", 2, false); // 5 -> 7
     const p2 = result.find((p) => p.id === "p2")!;
-    expect(p2.previousPosition).toEqual({ kind: "outer", index: 5 });
+    expect(p2.previousPosition).toEqual({ kind: "outer", index: 6 });
   });
 
   it("도착 칸에 이미 있던 같은 주인의 말은 업히기만 하고(제자리), 잡히지 않는다", () => {

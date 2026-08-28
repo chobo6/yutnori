@@ -17,13 +17,20 @@ describe("moveForward", () => {
     expect(result).toEqual({ kind: "outer", index: 18 });
   });
 
-  it("외곽 17번 칸에서 5칸 이동하면(17+5=22, 20 이상) 완주한다", () => {
+  it("외곽 17번 칸에서 5칸 이동하면(17+5=22, 도착점을 넘김) 완주한다", () => {
     const result = moveForward({ kind: "outer", index: 17 }, 5, false);
     expect(result).toEqual({ kind: "finished" });
   });
 
-  it("정확히 20칸째(외곽 19+도 1칸)로 도착해도 완주한다", () => {
+  it("정확히 도착점(외곽 20번, 19+도 1칸)에 도착하면 완주가 아니라 그 칸에 멈춰 선다(2026-08-28 변경)", () => {
+    // 도착점에 도착만 해서는 완주하지 않는다 — 사용자 명시 요청. 거기서 한 칸이라도 더
+    // 나가야(21 이상) 비로소 완주한다(아래 별도 테스트).
     const result = moveForward({ kind: "outer", index: 19 }, 1, false);
+    expect(result).toEqual({ kind: "outer", index: 20 });
+  });
+
+  it("도착점(외곽 20번)에서 한 칸이라도 더 가면 그제서야 완주한다(2026-08-28 변경)", () => {
+    const result = moveForward({ kind: "outer", index: 20 }, 1, false);
     expect(result).toEqual({ kind: "finished" });
   });
 
@@ -88,9 +95,9 @@ describe("moveForward", () => {
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
     });
 
-    it("15번에서 5칸(모)은 지름길이 없어 그냥 바깥길로 가서 완주한다(15+5=20, 2026-08-27 변경)", () => {
+    it("15번에서 5칸(모)은 지름길이 없어 그냥 바깥길로 가서 도착점(20번)에 멈춰 선다(15+5=20, 2026-08-27/28 변경)", () => {
       const result = moveForward({ kind: "outer", index: 15 }, 5, true);
-      expect(result).toEqual({ kind: "finished" });
+      expect(result).toEqual({ kind: "outer", index: 20 });
     });
 
     it("15번은 useShortcut을 true/false 어느 쪽으로 줘도 결과가 같다(2026-08-27 변경)", () => {
@@ -130,8 +137,13 @@ describe("moveForward", () => {
       });
     });
 
-    it("1단계에서 모(5칸)를 가면 중앙과 도착 구간을 다 지나 완주한다(1+5=6)", () => {
+    it("1단계에서 모(5칸)를 가면 중앙과 도착 구간을 다 지나 도착점(20번)에 멈춰 선다(1+5=6, 2026-08-28 변경)", () => {
       const result = moveForward({ kind: "shortcutIn", junction: 10, step: 1 }, 5, false);
+      expect(result).toEqual({ kind: "outer", index: 20 });
+    });
+
+    it("1단계에서 6칸을 가면 도착점을 지나 완주한다(1+6=7)", () => {
+      const result = moveForward({ kind: "shortcutIn", junction: 10, step: 1 }, 6, false);
       expect(result).toEqual({ kind: "finished" });
     });
 
@@ -153,8 +165,12 @@ describe("moveForward", () => {
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
     });
 
-    it("3칸 이상 가면 완주한다", () => {
-      expect(moveForward({ kind: "center", exitVia: "finish" }, 3, false)).toEqual({ kind: "finished" });
+    it("3칸 가면 도착점(20번)에 멈춰 선다(2026-08-28 변경, 절대값 3+3=6)", () => {
+      expect(moveForward({ kind: "center", exitVia: "finish" }, 3, false)).toEqual({ kind: "outer", index: 20 });
+    });
+
+    it("4칸 이상 가면 도착점을 지나 완주한다", () => {
+      expect(moveForward({ kind: "center", exitVia: "finish" }, 4, false)).toEqual({ kind: "finished" });
       expect(moveForward({ kind: "center", exitVia: "finish" }, 5, true)).toEqual({ kind: "finished" });
     });
   });
@@ -165,13 +181,23 @@ describe("moveForward", () => {
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
     });
 
-    it("1단계에서 2칸 이상 가면 완주한다", () => {
+    it("1단계에서 2칸 가면 도착점(20번)에 멈춰 선다(2026-08-28 변경, 절대값 3+1+2=6)", () => {
       const result = moveForward({ kind: "shortcutOut", step: 1 }, 2, false);
+      expect(result).toEqual({ kind: "outer", index: 20 });
+    });
+
+    it("1단계에서 3칸 가면 도착점을 지나 완주한다", () => {
+      const result = moveForward({ kind: "shortcutOut", step: 1 }, 3, false);
       expect(result).toEqual({ kind: "finished" });
     });
 
-    it("2단계에서 1칸만 더 가도 완주한다", () => {
+    it("2단계에서 1칸만 더 가면 도착점(20번)에 멈춰 선다(2026-08-28 변경, 절대값 3+2+1=6)", () => {
       const result = moveForward({ kind: "shortcutOut", step: 2 }, 1, false);
+      expect(result).toEqual({ kind: "outer", index: 20 });
+    });
+
+    it("2단계에서 2칸 가면 도착점을 지나 완주한다", () => {
+      const result = moveForward({ kind: "shortcutOut", step: 2 }, 2, false);
       expect(result).toEqual({ kind: "finished" });
     });
   });
@@ -209,8 +235,12 @@ describe("cross 트랙 (5번 지름길 — 15번으로 실제 교차)", () => {
       expect(result).toEqual({ kind: "shortcutOut", step: 2 });
     });
 
-    it("3칸 이상 가면 완주한다(15번이 아니라)", () => {
-      expect(moveForward({ kind: "center", exitVia: "cross" }, 3, true)).toEqual({ kind: "finished" });
+    it("3칸 가면 도착점(20번)에 멈춰 선다(15번이 아니라, 2026-08-28 변경)", () => {
+      expect(moveForward({ kind: "center", exitVia: "cross" }, 3, true)).toEqual({ kind: "outer", index: 20 });
+    });
+
+    it("4칸 가면 도착점을 지나 완주한다", () => {
+      expect(moveForward({ kind: "center", exitVia: "cross" }, 4, true)).toEqual({ kind: "finished" });
     });
   });
 
@@ -234,9 +264,15 @@ describe("cross 트랙 (5번 지름길 — 15번으로 실제 교차)", () => {
     expect(result).toEqual({ kind: "outer", index: 17 });
   });
 
-  it("cross 트랙에서 완주 지점(19)을 넘기면 정상적으로 완주한다", () => {
-    // shortcutCross step2(절대값5) + 6칸 = 절대값11 → outer(15+5)=20 → 19 초과 → finished
+  it("cross 트랙을 타고 바깥길에 합류해 정확히 도착점(20번)에 도착하면 멈춰 선다(2026-08-28 변경)", () => {
+    // shortcutCross step2(절대값5) + 6칸 = 절대값11 → outer(15+5)=20 → 도착점, 아직 완주 아님
     const result = moveForward({ kind: "shortcutCross", step: 2 }, 6, false);
+    expect(result).toEqual({ kind: "outer", index: 20 });
+  });
+
+  it("cross 트랙을 타고 바깥길에 합류한 뒤 도착점을 넘기면 정상적으로 완주한다", () => {
+    // 절대값12 → outer(15+6)=21 → 도착점(20) 초과 → finished
+    const result = moveForward({ kind: "shortcutCross", step: 2 }, 7, false);
     expect(result).toEqual({ kind: "finished" });
   });
 
@@ -286,9 +322,9 @@ describe("sideOf", () => {
     expect(sideOf({ kind: "outer", index: 15 })).toBe("C");
   });
 
-  it("outer 16~19는 D", () => {
+  it("outer 16~20은 D(20번은 도착점, 2026-08-28부터 완주 전엔 평범한 outer 칸)", () => {
     expect(sideOf({ kind: "outer", index: 16 })).toBe("D");
-    expect(sideOf({ kind: "outer", index: 19 })).toBe("D");
+    expect(sideOf({ kind: "outer", index: 20 })).toBe("D");
   });
 
   it("start/center/finished는 어느 변에도 속하지 않는다", () => {
