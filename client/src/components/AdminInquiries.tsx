@@ -12,6 +12,10 @@ export function AdminInquiries({ onUnauthorized, onBack }: { onUnauthorized: () 
         onUnauthorized();
         return;
       }
+      if (!res.ok) {
+        console.error("문의 목록 조회 실패", res.status);
+        return;
+      }
       setInquiries(await res.json());
     });
   }, [onUnauthorized]);

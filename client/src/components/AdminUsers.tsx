@@ -29,6 +29,10 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
       onUnauthorized();
       return;
     }
+    if (!res.ok) {
+      console.error("유저 목록 조회 실패", res.status);
+      return;
+    }
     const data = (await res.json()) as { rows: AdminUserRow[]; total: number };
     setRows(data.rows);
     setTotal(data.total);
@@ -50,6 +54,10 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
       onUnauthorized();
       return;
     }
+    if (!res.ok) {
+      console.error("밴 처리 실패", res.status);
+      return;
+    }
     load();
   }
 
@@ -57,6 +65,10 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
     const res = await fetch(`/api/admin/users/${id}/ips`, { credentials: "same-origin" });
     if (res.status === 401) {
       onUnauthorized();
+      return;
+    }
+    if (!res.ok) {
+      console.error("IP 이력 조회 실패", res.status);
       return;
     }
     const entries = (await res.json()) as { ip: string; firstSeen: string; lastSeen: string }[];

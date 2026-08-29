@@ -19,7 +19,10 @@ export async function connectAsUser(
 ): Promise<ClientRoom<MatchState>> {
   testUserCounter += 1;
   const user = getOrCreateUser(`test-google-sub-${testUserCounter}`, {});
-  setNickname(user.id, nickname);
+  const result = setNickname(user.id, nickname);
+  if (result !== "ok") {
+    throw new Error(`connectAsUser: setNickname("${nickname}") returned "${result}" — nickname probably already used in this test file`);
+  }
   const token = signSession(user.id);
   const port = (colyseus.server as unknown as { port: number }).port;
   const client = new ColyseusJsClient(`ws://127.0.0.1:${port}`, {

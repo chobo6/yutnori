@@ -98,7 +98,7 @@ export function AdminDashboard({
         <button onClick={onOpenInquiries}>문의함</button>
       </nav>
 
-      <section>
+      <section className={styles.section}>
         <h2>공지 배너 보내기</h2>
         <form onSubmit={handleAnnounce}>
           <input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="공지 내용" disabled={sending} />
@@ -109,7 +109,7 @@ export function AdminDashboard({
         {announceError && <p className={styles.error}>{announceError}</p>}
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h2>활성 방 ({rooms.length})</h2>
         <ul>
           {rooms.map((r) => (
@@ -120,7 +120,7 @@ export function AdminDashboard({
         </ul>
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h2>최근 입장/퇴장 (최대 100개)</h2>
         <ul>
           {events.slice(-100).reverse().map((e, i) => (
@@ -131,10 +131,10 @@ export function AdminDashboard({
         </ul>
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h2>최근 채팅 로그 (최대 200개)</h2>
         <ul>
-          {chatLogs.map((c, i) => (
+          {chatLogs.slice(0, 200).map((c, i) => (
             <li key={i}>
               [{c.createdAt}] {c.nickname}: {c.text}
             </li>
@@ -142,7 +142,7 @@ export function AdminDashboard({
         </ul>
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h2>닉네임으로 접속 기록 검색</h2>
         <form onSubmit={handleSearch}>
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="닉네임" />
@@ -159,7 +159,7 @@ export function AdminDashboard({
         )}
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h2>오늘 방문 {visitStats?.today ?? 0}회</h2>
         <ul>
           {visitStats?.recent.map((r) => (

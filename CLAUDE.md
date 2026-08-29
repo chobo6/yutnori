@@ -52,8 +52,10 @@ npm run build  # tsc -b && vite build
   시도 제한)는 songpyeon과 동일 패턴(`server/src/admin/*`, `client/src/components/Admin*.tsx`)이며,
   yutnori에 없는 기능(친구/상점/닉네임효과/특정유저 감시로그/실시간 입력 모니터링)은 옮기지 않았다.
   기존 룸 통합 테스트 4개 파일은 `server/src/testUtils/connectAsUser.ts`(테스트 유저를 DB에 만들고
-  세션 쿠키로 직접 WS 연결하는 헬퍼, songpyeon과 동일 패턴)로 전부 이전했다. 설계:
-  `docs/superpowers/specs/2026-08-29-google-login-admin-design.md`.
+  세션 쿠키로 직접 WS 연결하는 헬퍼, songpyeon과 동일 패턴)로 전부 이전했다. 같은 계정이 탭/기기
+  두 개로 같은 방에 동시에 플레이어로 들어오는 것도 `MatchRoom.ts`의 `playerUserIds`(sessionId ->
+  userId 맵)로 막는다 — 두 번째 시도는 "이미 이 방에 참가 중인 계정입니다."로 거부된다(관전자는
+  이 체크 대상이 아님). 설계: `docs/superpowers/specs/2026-08-29-google-login-admin-design.md`.
 
 ## 보드 좌표계 — 지름길 모델(2026-08-22 재설계)
 
