@@ -372,6 +372,14 @@ export class MatchRoom extends Room<MatchState> {
     return this.state.phase === "playing" && this.state.turnOrder[this.state.currentTurnIndex] === sessionId;
   }
 
+  /** 빽도가 실제로 뒤로 옮길 대상이 있는지 판단할 때 쓴다 — start(대기 중)/finished(완주)는
+   * "판 위"가 아니다. */
+  private hasPieceOnBoard(sessionId: string): boolean {
+    return this.state.pieces.some(
+      (p) => p.ownerSessionId === sessionId && p.positionKind !== "start" && p.positionKind !== "finished",
+    );
+  }
+
   private maybeStartGame() {
     if (this.state.phase !== "waiting") return;
     const requiredPerTeam = this.state.mode === "1v1" ? 1 : 2;
@@ -437,6 +445,20 @@ export class MatchRoom extends Room<MatchState> {
       this.state.gaugePhase = "idle";
       this.armThrowTimeout(sessionId);
       return;
+    }
+
+    // 빽도인데 판 위(=대기 중도 완주도 아닌)에 내 말이 하나도 없으면 어느 말을 골라도 제자리
+    // 이동일 뿐이다(moveBackward가 start는 그대로 start로 되돌림) — 클라이언트도 이 경우
+    // 도착 칸을 계산해내지 못해(positionToCoords("start", …)가 null) 말을 선택해도 확정할
+    // 방법이 없어 10초 시간초과까지 화면이 멈춘 것처럼 보인다. 그 대기 없이 곧장 이 패를
+    // 소비하고 턴을 넘긴다 — performMove가 알아서 다음 대기 패/턴 전환까지 이어서 처리한다.
+    if (result === "backDo" && !this.hasPieceOnBoard(sessionId)) {
+      const target = this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+      if (target) {
+        this.state.gaugePhase = "resolved";
+        this.performMove(sessionId, target.id, pending.id, false);
+        return;
+      }
     }
 
     this.state.gaugePhase = "resolved";

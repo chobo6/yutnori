@@ -42,6 +42,14 @@ function flush(ms = 50) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** 매 호출마다 다음 값을 순서대로 반환하고, 다 쓰면 마지막 값을 계속 반환하는 결정적 rng —
+ * "도" 확인은 성공시키되 그 뒤 빽도 재판정만 성공시키는 것처럼 단계별로 다른 값이 필요한
+ * 테스트에 쓴다(MatchRoom.abilities.test.ts와 동일 패턴). */
+function sequence(...values: number[]): () => number {
+  let i = 0;
+  return () => values[Math.min(i++, values.length - 1)];
+}
+
 // Global Constraints에 정리된 다섯 값 — 기본 flush()(~50ms)는 결과가 매번 달라지므로, 특정
 // 결과를 확정해야 하는 테스트는 이 값들로 elapsed를 고정한다. 게이지가 왼쪽 "도"에서
 // 시작해 오른쪽 "모"로 차오르도록 순서가 바뀌면서(2026-08-25) 각 값도 새 구간 경계에 맞게
@@ -885,6 +893,52 @@ describe("MatchRoom", () => {
       await spectator.leave(false);
       await flush();
       expect(room.state.spectators.size).toBe(0);
+    });
+  });
+
+  describe("빽도 자동 턴 넘김(2026-08-30~)", () => {
+    it("판 위에 내 말이 하나도 없을 때 빽도가 뜨면 이동 선택 없이 곧바로 다음 사람 턴으로 넘어간다", async () => {
+      // sequence(0.3, 0.1) — "도" 확인은 성공(0.3<0.7)시키고, 그 뒤 빽도 재판정도 성공(0.1<0.25)
+      // 시켜서 확실히 backDo를 만든다. 게임 시작 직후라 모든 말이 아직 start에 있다.
+      const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1) });
+      const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+      const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+      expect(myPieces.every((p) => p.positionKind === "start")).toBe(true);
+
+      turnClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      turnClient.send("throwRelease", {});
+      await flush();
+
+      // 실제로 관찰 가능한 효과로 검증한다: 대기 패가 남지 않고,
+      // 말도 그대로 start에 머문 채, 턴이 곧바로 다음 사람에게 넘어가야 한다.
+      expect(room.state.pendingResults.length).toBe(0);
+      expect(myPieces.every((p) => p.positionKind === "start")).toBe(true);
+      expect(room.state.gaugePhase).toBe("idle");
+      expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(currentTurnSessionId);
+    });
+
+    it("판 위에 내 말이 있을 때 빽도가 뜨면 평소처럼 직접 이동(말)을 선택해야 한다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1) });
+      const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+      const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+      // 한 말을 미리 판 위에 올려둔다 — 이제 빽도를 맞아도 되돌아갈 실제 대상이 있다.
+      myPieces[0].positionKind = "outer";
+      myPieces[0].positionIndex = 3;
+      myPieces[0].previousPositionKind = "outer";
+      myPieces[0].previousPositionIndex = 2;
+
+      turnClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      turnClient.send("throwRelease", {});
+      await flush();
+
+      // 자동으로 소비되지 않고 그대로 대기 패로 남아, 플레이어가 직접 이동을 선택해야 한다.
+      expect(room.state.pendingResults.length).toBe(1);
+      expect(room.state.gaugePhase).toBe("resolved");
+      expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(currentTurnSessionId);
     });
   });
 });
