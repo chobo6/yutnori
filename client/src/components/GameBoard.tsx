@@ -44,7 +44,6 @@ export function GameBoard({
   selectedPieceId: string | null;
   onSelectPiece: (pieceId: string | null) => void;
 }) {
-  const [chargeStartedAt, setChargeStartedAt] = useState(0);
   const isChargingRef = useRef(false);
   const abilityBubbles = useAbilityBubbles(room);
   const pieceAnimations = usePieceAnimations(room);
@@ -85,7 +84,6 @@ export function GameBoard({
     if (chainAnimatingResult !== null) return; // 체인 애니메이션 보여주는 동안은 다음 던지기를 막는다
     const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
     if (currentSessionId !== room.sessionId) return;
-    setChargeStartedAt(Date.now());
     isChargingRef.current = true;
     room.send("throwStart", {});
     // 포인터를 보드 루트에 캡처해둔다 — GameBoard는 게임 내내 계속 마운트돼 있으므로
@@ -284,7 +282,7 @@ export function GameBoard({
       </div>
 
       <div className={styles.centerOverlay}>
-        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} chainAnimatingResult={chainAnimatingResult} />
+        <TurnPanel room={room} chainAnimatingResult={chainAnimatingResult} />
       </div>
     </div>
   );

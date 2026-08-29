@@ -73,7 +73,7 @@ export function RoomList({
       <div className={styles.header}>
         <h2>방 목록</h2>
         <div className={styles.headerActions}>
-          <span className={styles.nickname}>{nickname}님</span>
+          <span className={styles.nickname}>{nickname}</span>
           <button type="button" className={styles.secondaryButton} onClick={onOpenInquiry}>
             문의하기
           </button>
