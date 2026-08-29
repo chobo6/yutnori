@@ -79,7 +79,3 @@ export async function submitNickname(nickname: string): Promise<Profile> {
   }
   return res.json();
 }
-
-export async function logout(): Promise<void> {
-  await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-}

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Room } from "colyseus.js";
 import type { MatchState } from "./game/matchTypes";
 import { useMatchRoom } from "./game/useMatchRoom";
-import { fetchMe, loginWithGoogle, logout, type Profile } from "./game/auth";
+import { fetchMe, loginWithGoogle, type Profile } from "./game/auth";
 import { GoogleLoginScreen } from "./components/GoogleLoginScreen";
 import { NicknameSetupScreen } from "./components/NicknameSetupScreen";
 import { InquiryModal } from "./components/InquiryModal";
@@ -63,12 +63,6 @@ function App() {
 
   const nickname = profile.nickname;
 
-  async function handleLogout() {
-    await logout();
-    setProfile(null);
-    setRoom(null);
-  }
-
   if (!room) {
     return (
       <>
@@ -76,7 +70,6 @@ function App() {
         <RoomList
           nickname={nickname}
           onRoomJoined={setRoom}
-          onLogout={handleLogout}
           onOpenInquiry={() => setShowInquiry(true)}
           onSessionExpired={() => setProfile(null)}
         />

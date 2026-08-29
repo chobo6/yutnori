@@ -26,7 +26,6 @@ export function NicknameSetupScreen({ onDone }: { onDone: (nickname: string) => 
   return (
     <div className={styles.wrap}>
       <h2>닉네임을 설정하세요</h2>
-      <p className={styles.hint}>계정에 영구적으로 저장돼요. 이후 변경은 관리자에게 문의해주세요.</p>
       <form onSubmit={handleSubmit}>
         <input
           className={styles.input}

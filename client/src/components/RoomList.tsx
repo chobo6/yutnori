@@ -20,13 +20,11 @@ function joinButtonState(meta: RoomMeta | undefined): { label: string; disabled:
 export function RoomList({
   nickname,
   onRoomJoined,
-  onLogout,
   onOpenInquiry,
   onSessionExpired,
 }: {
   nickname: string;
   onRoomJoined: (room: Room<MatchState>) => void;
-  onLogout: () => void;
   onOpenInquiry: () => void;
   onSessionExpired: () => void;
 }) {
@@ -78,9 +76,6 @@ export function RoomList({
           <span className={styles.nickname}>{nickname}님</span>
           <button type="button" onClick={onOpenInquiry}>
             문의하기
-          </button>
-          <button type="button" onClick={onLogout}>
-            로그아웃
           </button>
         </div>
       </div>
