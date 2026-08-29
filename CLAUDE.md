@@ -117,20 +117,23 @@ songpyeon과 동일한 방식 — **EC2 단일 인스턴스 + Docker + Caddy 리
 - 도커 네트워크 `yutnori-net` 하나에 `caddy`(공식 `caddy:2` 이미지, `-p 80:80 -p 443:443`, Caddyfile을 `/home/ec2-user/caddy/Caddyfile`에서 바인드 마운트)와 `yutnori`(우리 앱, 호스트 포트 노출 없이 캐디가 내부 네트워크로만 접근) 두 컨테이너가 떠 있다. 둘 다 `--restart unless-stopped`.
 - Caddyfile: `<현재 EC2 IP를 하이픈으로 바꾼 값>.nip.io { reverse_proxy yutnori:2567 }` — Caddy가 컨테이너 이름 `yutnori`를 도커 내장 DNS(127.0.0.11)로 해석해서 프록시한다.
 
-**재배포 절차(songpyeon과 동일):**
+**재배포 절차(2026-08-29 구글 로그인 도입 이후 갱신 — `--build-arg`와 `-e`/`-v`가 추가됨):**
 ```
 # 로컬(워크스페이스 루트)
-cd yutnori && docker build -t yutnori:latest .
-cd .. && docker save yutnori:latest -o yutnori.tar
-scp -i yutnori.pem yutnori.tar ec2-user@<EC2 IP>:~/
+docker build --build-arg VITE_GOOGLE_CLIENT_ID=<client/.env.local의 값> -t yutnori:latest .
+docker save yutnori:latest | gzip > yutnori.tar.gz
+scp -i yutnori.pem yutnori.tar.gz ec2-user@43-201-71-99.nip.io:~/
 
-# 서버(SSH)
-docker load -i ~/yutnori.tar
+# 서버(SSH, ec2-user@43-201-71-99.nip.io)
+docker load < ~/yutnori.tar.gz && rm ~/yutnori.tar.gz
 docker stop yutnori && docker rm yutnori
-docker run -d --name yutnori --network yutnori-net --restart unless-stopped yutnori:latest
-rm ~/yutnori.tar
+docker run -d --name yutnori --network yutnori-net --restart unless-stopped \
+  -e GOOGLE_CLIENT_ID=<client_id> -e SESSION_JWT_SECRET=<값> -e ADMIN_PASSWORD=<값> \
+  -v /home/ec2-user/yutnori-data:/app/server/data \
+  yutnori:latest
 ```
-`caddy`/`yutnori-net`은 그대로 두고 앱 컨테이너만 교체한다. 이미지 레지스트리 없이 `docker save`→`scp`→`docker load`로 직접 옮기는 것도 songpyeon과 동일.
+`caddy`/`yutnori-net`은 그대로 두고 앱 컨테이너만 교체한다. 이미지 레지스트리 없이 `docker save`→`scp`→`docker load`로 직접 옮기는 것도 songpyeon과 동일. **`--build-arg`를 빠뜨리면 구글 로그인이 빈 client_id로 배포된다**(songpyeon과 동일 함정, `docs/TROUBLESHOOTING.md` 참고 대상) — 재배포 전 `docker run --rm --entrypoint sh yutnori:latest -c "grep -o '<client_id 앞부분>[a-zA-Z0-9._-]*' server/public/assets/*.js"`로 번들에 실제 값이 박혔는지 먼저 확인할 것. `-v`는 반드시 호스트 경로 바인드 마운트여야 한다(네임드 볼륨과 혼동하면 재배포마다 빈 DB로 시작 — songpyeon의 동일 실수 사례가 그쪽 CLAUDE.md에 있음). `GOOGLE_CLIENT_ID`/`SESSION_JWT_SECRET`/`ADMIN_PASSWORD` 실제 값은 로컬 `server/.env`(git 미포함)에서 확인.
+관리자 페이지(`/admin`, `/api/admin/*`)는 Caddyfile에 IP allowlist가 추가돼 있다(관리자 PC의 고정 IP만 허용, songpyeon과 동일 `handle`/`handle` 패턴) — 집 인터넷 IP가 바뀌면 여기서 403이 뜬다, `/home/ec2-user/caddy/Caddyfile`의 `remote_ip` 목록을 갱신하고 `docker restart caddy`.
 
 **EC2 재시작 시 반드시 해야 할 일(songpyeon과 동일한 함정)**: EC2를 재시작(중지→시작)하면 **퍼블릭 IP가 바뀐다** — nip.io는 IP를 그대로 호스트명에 박아 쓰므로 주소 전체(`https://<IP>.nip.io`)가 바뀐다. 재시작 후에는 `/home/ec2-user/caddy/Caddyfile`의 호스트명을 새 IP로 고쳐 쓰고 `docker restart caddy`를 해줘야 새 IP용 인증서를 다시 발급받는다 — 안 하면 컨테이너는 다 떠 있어도 새 주소가 아무 응답도 안 한다.
 
