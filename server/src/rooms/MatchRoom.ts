@@ -169,7 +169,12 @@ export class MatchRoom extends Room<MatchState> {
       const text = message.text.trim().slice(0, MAX_CHAT_LENGTH);
       if (!text) return;
       this.broadcast("chatMessage", { sessionId: client.sessionId, text });
-      recordChatLog(client.auth.nickname, text);
+      // 관전자 채팅은 닉네임에 "(관전)"을 붙여 기록한다(songpyeon과 동일 관례) — 관리자
+      // 채팅 로그만 봐서는 플레이어와 관전자를 구분할 방법이 없어서다. 입장/퇴장 이벤트
+      // 로그(recordEvent)는 이미 type이 spectate_join/spectate_leave로 따로 구분되므로
+      // 여기서 건드리지 않는다 — 닉네임에 접미사가 필요한 건 채팅 로그뿐이다.
+      const isSpectator = this.state.spectators.has(client.sessionId);
+      recordChatLog(isSpectator ? `${client.auth.nickname} (관전)` : client.auth.nickname, text);
     });
   }
 

@@ -68,12 +68,21 @@ export function ChatBox({ room }: { room: Room<MatchState> }) {
         <>
           <ul className={styles.list} ref={listRef}>
             {messages.length === 0 && <li className={styles.empty}>아직 채팅이 없습니다</li>}
-            {messages.map((m) => (
-              <li key={m.key} className={styles.message}>
-                <span className={styles.author}>{playerLabel(m.sessionId, room)}</span>
-                <span className={styles.text}>{m.text}</span>
-              </li>
-            ))}
+            {messages.map((m) => {
+              // 관전자 채팅은 닉네임 뒤에 "(관전)"을 붙인다(songpyeon과 동일 관례) — 채팅
+              // 로그(관리자 대시보드)에도 같은 접미사가 남아 플레이어 채팅과 구분된다
+              // (server/src/rooms/MatchRoom.ts의 sendChat 핸들러 참고). playerLabel처럼
+              // "지금" 방 상태 기준으로 판단하므로, 관전자가 이미 나갔다면(다른 곳과 동일한
+              // 한계) 이 접미사도 더 이상 안 붙는다.
+              const isSpectator = room.state.spectators.has(m.sessionId);
+              const author = playerLabel(m.sessionId, room);
+              return (
+                <li key={m.key} className={styles.message}>
+                  <span className={styles.author}>{isSpectator ? `${author} (관전)` : author}</span>
+                  <span className={styles.text}>{m.text}</span>
+                </li>
+              );
+            })}
           </ul>
           <form className={styles.form} onSubmit={handleSubmit}>
             <input

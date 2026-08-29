@@ -5,6 +5,7 @@ import { createGameServer } from "../createServer";
 import { MatchState } from "./MatchState";
 import { connectAsUser } from "../testUtils/connectAsUser";
 import { db } from "../db/connection";
+import { getChatLogs, _resetForTest as resetChatLogsForTest } from "../admin/chatLog";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
@@ -729,6 +730,32 @@ describe("MatchRoom", () => {
     await flush();
 
     expect(received).toHaveLength(1);
+  });
+
+  it("관전자 채팅은 로그에 닉네임 뒤에 (관전)이 붙어 기록된다(songpyeon과 동일 관례)", async () => {
+    resetChatLogsForTest();
+    const { room } = await setupFourPlayers(colyseus);
+    // 게임이 이미 playing 상태라, 이 시점에 새로 접속하면 onJoin이 자리가 없다고 보고
+    // 자동으로 관전자로 등록한다(플레이어로 들어가는 게 아님).
+    const spectator = await connectAsUser(colyseus, room, "관전채팅닉");
+    await flush();
+    expect(room.state.spectators.has(spectator.sessionId)).toBe(true);
+
+    spectator.send("sendChat", { text: "관전자입니다" });
+    await flush();
+
+    const logs = getChatLogs();
+    expect(logs[0]).toMatchObject({ nickname: "관전채팅닉 (관전)", text: "관전자입니다" });
+  });
+
+  it("플레이어 채팅은 로그에 (관전) 접미사 없이 그대로 기록된다", async () => {
+    resetChatLogsForTest();
+    const { room, clients } = await setupFourPlayers(colyseus);
+    clients[0].send("sendChat", { text: "플레이어입니다" });
+    await flush();
+
+    const logs = getChatLogs();
+    expect(logs[0]).toMatchObject({ nickname: "플레이어1", text: "플레이어입니다" });
   });
 
   it("두 제한시간을 모두 짧게 두면 아무도 응답하지 않아도 게임이 계속 진행된다", async () => {
