@@ -42,6 +42,18 @@ npm run build  # tsc -b && vite build
   - **기본은 접힌 상태(2026-08-29 추가)** — 처음엔 항상 펼쳐둔 채로 만들었는데, 모바일 화면에서 항상 펼쳐진 채팅창이 화면 대부분을 가린다는 신고로 헤더만 보이는 접힌 상태를 기본값으로 바꿨다. 헤더(`ChatBox.tsx`의 `<button>`)를 눌러 펼치고 접는다. 접혀 있는 동안 도착한 메시지 수는 헤더의 안읽음 배지로 보여주고, 펼치면 0으로 리셋된다 — `open` 상태를 `openRef`(useRef)로도 미러링해서, 메시지 누적 effect가 `open`을 의존성에 안 넣고도(그러면 매 토글마다 다시 스크롤/카운트 로직이 도는 걸 피할 수 있다) 항상 최신 열림 여부를 읽을 수 있게 했다.
 - **보드는 실제 정사각형 트랙 시각화가 구현되어 있다**(2026-08-23~): `GameBoard.tsx`는 SVG로 그린 정사각형 트랙(외곽 20칸 + 5/10/15번 대각선 지름길 + 중앙)을 표시하고, 좌표는 `client/src/game/boardCoords.ts`(`positionToCoords`, `JUNCTION_CORNER`)가 계산한다. 말은 팀 색이 입혀진 캐릭터 초상(`PieceToken`)으로 보드 위에 그려지고, 플레이어 정보는 화면 네 모서리(`PlayerCorner`, `client/src/game/cornerSlots.ts`의 `assignCorners`로 배치 결정)에 카드로 표시된다. 던지기 트리거는 더 이상 전용 버튼이 아니라 보드 전체 영역(`GameBoard.tsx` 루트 `<div>`의 `onPointerDown`/`onPointerUp`)이다. 설계 배경은 `docs/superpowers/specs/2026-08-23-board-visualization-design.md` 참고.
 - **캐릭터(교주/성직/마담/의사) 능력 효과는 구현 완료**(2026-08-21~, `server/src/game/abilities.ts`) — 상세 규칙은 `docs/superpowers/specs/2026-08-21-character-abilities-design.md` 참고. 캐릭터 선택 개수는 모드별로 다름(2v2=서로 다른 2종, 1v1=중복 허용 4종, REQUIREMENTS.md §2).
+- **구글 로그인 + 관리자 대시보드 + DB** (2026-08-29~): 로그인이 필수가 됐다(익명 플레이 없음) — `better-sqlite3`
+  단일 DB 파일(`server/src/db/connection.ts`)에 계정(`users`, 닉네임은 계정당 최초 1회 고정 후 관리자만
+  변경 가능)과 로그(`events`=입퇴장, `chat_logs`, `user_ips`, `daily_visit_log`, `inquiries`,
+  `nickname_history`)를 저장한다. `MatchRoom.onAuth`가 WS 업그레이드 시점에 세션 쿠키를 직접 파싱해
+  로그인/밴 여부를 검증하고(`server/src/auth/session.ts`, `googleAuth.ts`), 통과하면 `client.auth`에
+  `{ip, userId, nickname}`을 담아 `onJoin`이 그대로 쓴다 — 더 이상 클라이언트가 보내는 닉네임 문자열을
+  신뢰하지 않는다. 관리자 페이지(`/admin`, `ADMIN_PASSWORD` 환경변수, 12시간 세션 + 5회/15분 로그인
+  시도 제한)는 songpyeon과 동일 패턴(`server/src/admin/*`, `client/src/components/Admin*.tsx`)이며,
+  yutnori에 없는 기능(친구/상점/닉네임효과/특정유저 감시로그/실시간 입력 모니터링)은 옮기지 않았다.
+  기존 룸 통합 테스트 4개 파일은 `server/src/testUtils/connectAsUser.ts`(테스트 유저를 DB에 만들고
+  세션 쿠키로 직접 WS 연결하는 헬퍼, songpyeon과 동일 패턴)로 전부 이전했다. 설계:
+  `docs/superpowers/specs/2026-08-29-google-login-admin-design.md`.
 
 ## 보드 좌표계 — 지름길 모델(2026-08-22 재설계)
 
@@ -71,6 +83,23 @@ npm run build  # tsc -b && vite build
 - **포인터 캡처를 쥔 엘리먼트를 `gaugePhase` 전환 중 조건부로 언마운트/교체하지 말 것** — 더 이상 전용 던지기 버튼은 없고, 이제 `GameBoard.tsx`의 루트 `<div>`(보드 전체 영역)가 `onPointerDown`/`onPointerUp`과 `setPointerCapture`를 직접 갖는다. 이 div는 게임 내내 계속 마운트돼 있어야 한다 — `idle`/`charging`/`resolved` 등 `gaugePhase`별로 이 루트를 다른 엘리먼트로 갈아끼우거나, 포인터 핸들러를 (조건부 렌더링되는) 자식 엘리먼트로 옮기면, 리렌더 시 캡처가 풀려 `pointerup`(=`throwRelease`)이 안 잡힌다. 즉 버튼이 사라졌다고 이 제약도 함께 사라진 게 아니라, 지금은 보드 전체가 살아있는 던지기 트리거이므로 오히려 똑같이(혹은 더) 중요하다. (`docs/TROUBLESHOOTING.md` #9 — 이번 프로젝트에서 가장 심각했던 버그)
 - **Colyseus `sessionId`는 하이픈(`-`)을 포함할 수 있다** — `pieceId`(`` `${sessionId}-${i}` ``)에서 말 번호를 뽑을 때 `split("-")[1]`을 쓰면 깨진다. 항상 `split("-").pop()`(마지막 조각)을 쓸 것. (`docs/TROUBLESHOOTING.md` #10)
 - **좁은 화면(모바일)에서 그리드 열이 여러 행에 걸쳐 공유되면 폭이 의도치 않게 합산된다** — `App.module.css`의 `.playScreen`(`grid-template-areas: "tl . tr" ". board ." "bl . br"`)은 3열 구조라 `topLeft`/`bottomLeft`가 같은 왼쪽 열 트랙을, `topRight`/`bottomRight`가 같은 오른쪽 열 트랙을 공유한다. 데스크톱(`#root` 최대 1126px)에서는 `.board`(`width: min(90vw, 480px)`, 넓은 화면에선 480px로 고정)가 항상 여유 있게 들어가서 문제가 안 드러났지만, 뷰포트가 480px보다 좁아져 90vw가 480px 밑으로 떨어지면 보드가 화면의 대부분을 차지하기 시작하면서 옆 플레이어 코너(`PlayerCorner.module.css`의 `.card { min-width: 90px }`)가 필요로 하는 최소 폭까지 더한 전체 폭이 뷰포트를 넘어버려 레이아웃 전체가 한쪽으로 밀리는 가로 스크롤이 생겼다(2026-08-28 발견, 실기기 아니라도 브라우저 창을 375~390px로 좁히면 재현됨). `@media (max-width: 600px)`에서 `.playScreen`을 grid 대신 `flex-direction: column`으로 바꾸고 각 코너/보드에 `order`를 줘서 세로로 쌓는 방식으로 고쳤다 — 그리드 열 공유 자체를 없애 폭 경쟁이 발생하지 않게 하는 게 핵심이었다(각 코너 카드 폭을 줄이거나 보드를 더 작게 만드는 미봉책이 아니라).
+- **`MatchRoom.onAuth`는 WS 업그레이드 요청이라 Express의 `cookie-parser` 미들웨어를 안 거친다** —
+  `context.headers?.cookie`를 `getCookieValue()`로 직접 파싱해야 한다(HTTP 라우트의 `req.cookies`와는
+  별도 경로). 구현이 다르면 안 맞는 게 아니라, 애초에 같은 파싱 로직을 재사용하지 않으면 세션 검증
+  자체가 씹힌다.
+- **테스트에서 로그인된 유저로 방에 접속하려면 `@colyseus/testing`의 `connectTo`가 아니라
+  `server/src/testUtils/connectAsUser.ts`를 써야 한다** — `connectTo`는 커스텀 헤더(쿠키)를 넘길 방법이
+  없어서, 실제 세션 쿠키가 필요한 `onAuth`를 통과시킬 수 없다. `colyseus.js`의 `Client`를 직접
+  `{ headers: { Cookie: ... } }`로 생성해서 우회한다.
+- **관리자 페이지(`/admin`)와 구글 로그인은 같은 오리진에서만 동작함** — dev 환경(client 5173 / server
+  2567)은 서로 다른 오리진이라 쿠키 기반 세션이 안 통한다. 로컬에서 확인하려면 client를 빌드해
+  `server/public`에 복사한 뒤 서버가 직접 서빙하는 2567 포트로 접속해야 한다(songpyeon과 동일 문제).
+- **서버 환경변수(`GOOGLE_CLIENT_ID`/`SESSION_JWT_SECRET`/`ADMIN_PASSWORD`)는 `server/.env`에서 읽는다**
+  (`server/src/index.ts`가 `dotenv/config`로 로드, git에는 `.env.example`만 올라간다). 이 파일이 없거나
+  비어있으면 구글 로그인이 즉시 실패한다.
+- **`docker build`에 `--build-arg VITE_GOOGLE_CLIENT_ID=...`를 빠뜨리면 구글 로그인이 빈 client_id로
+  배포된다** — 서버 쪽 `GOOGLE_CLIENT_ID`(런타임 `-e`, ID 토큰 검증용)와 클라이언트 쪽
+  `VITE_GOOGLE_CLIENT_ID`(Vite가 빌드 시점에 번들에 박음)는 완전히 다른 주입 경로다.
 - **알려진 한계, 고치지 않기로 함**: 대기 중인 말 표시는 `PlayerCorner`가 `assignCorners`(`client/src/game/cornerSlots.ts`, `room.state.turnOrder` 기반으로 모서리 배치)로 결정된 모서리 카드 안에서 그린다. 연결이 끊긴 플레이어라도 `turnOrder`에 남아 있는 한 모서리 자체는 배정되지만, 그 플레이어의 팀 정보(`players.get(...).team`)가 비어 있으면 말 색상 등 표시가 무너질 수 있다(서버 상태 자체는 정상, 클라이언트 표시만 영향받는 것). 재접속/이탈 정책을 별도로 만들지 않기로 한 결정과 같은 맥락 — 필요해지면 그때 다시 설계할 것.
 
 ## 배포

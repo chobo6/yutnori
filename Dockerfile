@@ -11,6 +11,8 @@ COPY server ./server
 # 접속한다(권장, nip.io 주소가 EC2 재시작마다 바뀌어도 재빌드가 필요 없다).
 ARG VITE_COLYSEUS_URL=
 ENV VITE_COLYSEUS_URL=$VITE_COLYSEUS_URL
+ARG VITE_GOOGLE_CLIENT_ID=
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 RUN npm run build --workspace client
 
 # 2단계: 런타임 — server 소스 + node_modules + client 빌드 결과만 남긴다
