@@ -70,6 +70,10 @@ export function AdminDashboard({
         credentials: "same-origin",
         body: JSON.stringify({ message }),
       });
+      if (res.status === 401) {
+        onUnauthorized();
+        return;
+      }
       if (!res.ok) throw new Error("전송에 실패했습니다.");
       setMessage("");
     } catch (err) {
