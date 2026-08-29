@@ -13,6 +13,11 @@
   border-radius: 6px;
 }
 
+.hint {
+  color: var(--text);
+  opacity: 0.8;
+}
+
 .error {
   color: var(--accent);
   font-size: 0.85rem;
