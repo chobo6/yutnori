@@ -1,0 +1,11 @@
+.wrap {
+  font-family: system-ui, sans-serif;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.item {
+  border-bottom: 1px solid #ddd;
+  padding: 0.75rem 0;
+}
