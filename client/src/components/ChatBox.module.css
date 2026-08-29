@@ -2,8 +2,6 @@
   position: fixed;
   right: 1rem;
   bottom: 1rem;
-  width: min(300px, calc(100vw - 2rem));
-  max-height: min(360px, calc(100vh - 2rem));
   display: flex;
   flex-direction: column;
   background: #fffdf7;
@@ -14,14 +12,51 @@
   z-index: 50;
 }
 
+/* 접힌 상태(기본값, 2026-08-29~) — 헤더만 딱 맞는 크기로 떠 있어서 화면을 가리지 않는다.
+   모바일에서 채팅창이 항상 펼쳐져 있어 화면 대부분을 덮는다는 신고로 기본을 이걸로 바꿨다. */
+.closed {
+  width: auto;
+}
+
+.open {
+  width: min(300px, calc(100vw - 2rem));
+  max-height: min(360px, calc(100vh - 2rem));
+}
+
 .header {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #fff;
   background: var(--accent);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chevron {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .list {
@@ -105,7 +140,7 @@
 }
 
 @media (max-width: 420px) {
-  .box {
+  .open {
     right: 0.5rem;
     bottom: 0.5rem;
     left: 0.5rem;
