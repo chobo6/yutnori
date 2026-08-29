@@ -1893,11 +1893,12 @@ import { recordInquiry } from "./admin/inquiries";
 
 `const app = express();` 바로 다음 줄에 추가:
 ```ts
+  app.set("trust proxy", true);
   app.use(express.json());
   app.use(cookieParser());
 ```
 
-(`express.json()`이 이미 있는지 파일을 먼저 확인 — 없으면 추가, 있으면 중복 등록하지 않는다.)
+(`express.json()`이 이미 있는지 파일을 먼저 확인 — 없으면 추가, 있으면 중복 등록하지 않는다. `trust proxy`는 반드시 필요하다 — 프로덕션은 Caddy 리버스 프록시 뒤에서 돌므로, 이게 없으면 이후 모든 `req.ip`가 실제 클라이언트 IP가 아니라 Caddy 컨테이너의 IP로 잡혀서 `recordUserIp`/`recordVisit`/로그인 시도 제한이 전부 무의미해진다 — songpyeon의 `createServer.ts`에도 동일하게 있음.)
 
 - [ ] **Step 2: `/api/rooms`를 로그인 필수로 변경**
 
