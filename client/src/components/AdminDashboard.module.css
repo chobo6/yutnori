@@ -122,6 +122,32 @@
   border-bottom: none;
 }
 
+.empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+/* 접속자 닉네임처럼 짧은 값을 여러 개 나열할 때만 알약 배지로 — 로그 목록(세로 나열)과
+   시각적으로 구분한다. .section ul/.section li보다 명시도를 높여야 오버라이드된다. */
+.section .chipList {
+  flex-direction: row;
+  flex-wrap: wrap;
+  max-height: none;
+  overflow: visible;
+}
+
+.section .chip {
+  padding: 3px 12px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
 /* 입퇴장/채팅/검색 로그처럼 타임스탬프가 붙는 목록만 모노스페이스로 — "로그"라는
    느낌을 시각적으로 드러낸다. 활성 방/방문 통계처럼 요약 정보인 목록은 일반 서체 유지. */
 .logList li {

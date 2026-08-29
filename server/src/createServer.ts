@@ -21,6 +21,7 @@ import { adminSetNickname, listUsers, setUserBanned } from "./auth/googleAuth";
 import { getIpsForUser } from "./admin/userIps";
 import { getInquiries } from "./admin/inquiries";
 import { broadcast, subscribe } from "./admin/announcements";
+import { getOnlineNicknames, touch as touchPresence } from "./admin/presence";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** 프로덕션 Docker 이미지에서 client의 빌드 결과(client/dist)를 여기로 복사해 넣는다(Dockerfile
@@ -105,6 +106,9 @@ export function createGameServer() {
     recordUserIp(user.id, req.ip ?? "unknown");
     recordVisit(user.id);
     touchLastLogin(user.id);
+    // 닉네임 설정 전(로그인만 하고 아직 계정 세팅 중)에는 "접속 중인 유저" 목록에
+    // 의미 있게 보여줄 이름이 없으므로 제외한다 — 닉네임이 생긴 이후부터 집계한다.
+    if (user.nickname) touchPresence(user.id, user.nickname);
     res.json(user);
   });
 
@@ -163,6 +167,10 @@ export function createGameServer() {
   app.get("/api/admin/rooms", requireAdmin, async (_req, res) => {
     const rooms = await matchMaker.query({ name: "match" });
     res.json(rooms.map((r) => ({ roomId: r.roomId, clients: r.clients, maxClients: r.maxClients, metadata: r.metadata })));
+  });
+
+  app.get("/api/admin/online-users", requireAdmin, (_req, res) => {
+    res.json(getOnlineNicknames());
   });
 
   app.get("/api/admin/events", requireAdmin, (_req, res) => {

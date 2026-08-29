@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Room } from "colyseus.js";
 import type { MatchState } from "./game/matchTypes";
 import { useMatchRoom } from "./game/useMatchRoom";
-import { fetchMe, loginWithGoogle, type Profile } from "./game/auth";
+import { fetchMe, loginWithGoogle, ping, type Profile } from "./game/auth";
 import { GoogleLoginScreen } from "./components/GoogleLoginScreen";
 import { NicknameSetupScreen } from "./components/NicknameSetupScreen";
 import { InquiryModal } from "./components/InquiryModal";
@@ -28,6 +28,15 @@ function App() {
   useEffect(() => {
     fetchMe().then(setProfile).catch(() => setProfile(null));
   }, []);
+
+  // 로비에만 머물러 어떤 매치 룸에도 안 들어간 유저는 서버 입장에서 실시간으로 추적할
+  // 방법이 없다 — 로그인 상태인 동안 주기적으로 핑을 보내서 관리자 대시보드의
+  // "현재 접속자"(server/src/admin/presence.ts, TTL 30초)가 갱신되게 한다.
+  useEffect(() => {
+    if (!profile) return;
+    const interval = setInterval(ping, 15000);
+    return () => clearInterval(interval);
+  }, [profile]);
 
   const handleCredential = useCallback(async (credential: string) => {
     setLoginError(null);

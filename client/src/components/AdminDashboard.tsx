@@ -40,6 +40,7 @@ export function AdminDashboard({
   onOpenUsers: () => void;
   onOpenInquiries: () => void;
 }) {
+  const [onlineNicknames, setOnlineNicknames] = useState<string[]>([]);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [events, setEvents] = useState<AdminEvent[]>([]);
   const [chatLogs, setChatLogs] = useState<ChatLogEntry[]>([]);
@@ -53,13 +54,15 @@ export function AdminDashboard({
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [r, e, c, v] = await Promise.all([
+      const [o, r, e, c, v] = await Promise.all([
+        fetchJson<string[]>("/api/admin/online-users", onUnauthorized),
         fetchJson<RoomInfo[]>("/api/admin/rooms", onUnauthorized),
         fetchJson<AdminEvent[]>("/api/admin/events", onUnauthorized),
         fetchJson<ChatLogEntry[]>("/api/admin/chat-logs", onUnauthorized),
         fetchJson<DailyVisitStats>("/api/admin/stats/daily-visitors", onUnauthorized),
       ]);
       if (cancelled) return;
+      if (o) setOnlineNicknames(o);
       if (r) setRooms(r);
       if (e) setEvents(e);
       if (c) setChatLogs(c);
@@ -122,6 +125,21 @@ export function AdminDashboard({
           </button>
         </form>
         {announceError && <p className={styles.error}>{announceError}</p>}
+      </section>
+
+      <section className={styles.section}>
+        <h2>현재 접속자 ({onlineNicknames.length})</h2>
+        {onlineNicknames.length === 0 ? (
+          <p className={styles.empty}>접속 중인 유저가 없습니다.</p>
+        ) : (
+          <ul className={styles.chipList}>
+            {onlineNicknames.map((n) => (
+              <li key={n} className={styles.chip}>
+                {n}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className={styles.section}>

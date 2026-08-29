@@ -66,6 +66,13 @@ export async function fetchMe(): Promise<Profile | null> {
   return res.json();
 }
 
+// fetchMe()와 같은 라우트를 부르지만 응답을 안 쓰고 버린다 — 로그인 상태인 동안 주기적으로
+// 호출해서 서버의 "접속 중" 판정(server/src/admin/presence.ts)을 갱신하기 위한 용도.
+// 로비에만 머물러 어떤 매치 룸에도 안 들어간 유저는 이 핑이 유일한 실시간 흔적이다.
+export async function ping(): Promise<void> {
+  await fetch("/api/auth/me", { credentials: "same-origin" }).catch(() => {});
+}
+
 export async function submitNickname(nickname: string): Promise<Profile> {
   const res = await fetch("/api/auth/nickname", {
     method: "POST",
