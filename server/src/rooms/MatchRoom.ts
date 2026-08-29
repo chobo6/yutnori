@@ -29,6 +29,11 @@ import { recordChatLog } from "../admin/chatLog";
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
 const DEFAULT_THROW_TIMEOUT_MS = 10000;
 const DEFAULT_MOVE_TIMEOUT_MS = 10000;
+/** 게임 진행 중(playing) 갑작스런 연결 끊김에 주는 재접속 유예 시간(초). 대기실 이탈이나
+ * "나가기" 버튼 클릭 같은 의도적 퇴장(consented)에는 적용하지 않는다 — 플레이 중엔 애초에
+ * 나가기 버튼이 없어(ParticipantBar.tsx) 이 단계의 끊김은 항상 의도치 않은 것이다. 클라이언트의
+ * localStorage 재접속 유예 판단(client/src/colyseus.ts)과 반드시 같은 값을 써야 한다. */
+const RECONNECTION_GRACE_SECONDS = 20;
 const MAX_CHAT_LENGTH = 200;
 /** 턴당 부여 가능한 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 첫 던지기 포함 최대 3회. */
 const MAX_EXTRA_THROWS = 2;
@@ -64,12 +69,15 @@ export class MatchRoom extends Room<MatchState> {
   /** 같은 계정이 탭/기기 두 개로 같은 방에 동시에 플레이어로 들어오는 걸 막기 위한
    * sessionId -> userId 매핑. 관전자는 여기 안 들어간다. */
   private playerUserIds = new Map<string, number>();
+  /** 재접속 유예 시간(초) — 기본 RECONNECTION_GRACE_SECONDS(20), 테스트에서 짧게 주입 가능. */
+  private reconnectionGraceSeconds = RECONNECTION_GRACE_SECONDS;
 
   async onCreate(options?: {
     title?: string;
     mode?: "2v2" | "1v1";
     throwTimeoutMs?: number;
     moveTimeoutMs?: number;
+    reconnectionGraceSeconds?: number;
     rng?: Rng;
     allowSpectators?: boolean;
   }) {
@@ -99,6 +107,9 @@ export class MatchRoom extends Room<MatchState> {
 
     if (typeof options?.throwTimeoutMs === "number") this.throwTimeoutMs = options.throwTimeoutMs;
     if (typeof options?.moveTimeoutMs === "number") this.moveTimeoutMs = options.moveTimeoutMs;
+    if (typeof options?.reconnectionGraceSeconds === "number") {
+      this.reconnectionGraceSeconds = options.reconnectionGraceSeconds;
+    }
     if (typeof options?.rng === "function") this.rng = options.rng;
 
     this.onMessage("pickTeam", (client, message: { team: "A" | "B" } | undefined) => {
@@ -241,10 +252,12 @@ export class MatchRoom extends Room<MatchState> {
     });
   }
 
-  onLeave(client: Client) {
+  async onLeave(client: Client, consented: boolean) {
     const ip = String(client.auth?.ip ?? "unknown");
     const spectator = this.state.spectators.get(client.sessionId);
     if (spectator) {
+      // 관전자는 재접속 유예 대상이 아니다 — 다시 들어와서 관전하면 그만이라 자리를
+      // 붙잡아둘 이유가 없다.
       this.state.spectators.delete(client.sessionId);
       recordEvent({
         type: "spectate_leave",
@@ -259,6 +272,27 @@ export class MatchRoom extends Room<MatchState> {
     }
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+
+    // 게임 진행 중(playing) 갑작스런 연결 끊김(consented=false)만 재접속 유예를 준다 —
+    // 대기실 이탈은 다른 사람이 그 자리에 들어올 수 있어야 하므로 유예 없이 즉시 처리한다.
+    if (!consented && this.state.phase === "playing") {
+      try {
+        await this.allowReconnection(client, this.reconnectionGraceSeconds);
+        // 재접속 성공 — Colyseus의 재접속은 onAuth를 다시 안 거치므로, 유예 시간 동안
+        // 계정이 밴됐을 가능성을 여기서 직접 다시 확인해야 한다(재접속 후 그대로 게임에
+        // 남아있게 되는 걸 막기 위함).
+        const freshUser = client.auth?.userId ? getUserById(client.auth.userId) : undefined;
+        if (freshUser?.bannedAt) {
+          this.state.players.delete(client.sessionId);
+          this.playerUserIds.delete(client.sessionId);
+          client.leave();
+        }
+        return;
+      } catch {
+        // 유예 시간 안에 재접속하지 못함 — 아래로 내려가 평소처럼 완전히 퇴장 처리한다.
+      }
+    }
+
     this.state.players.delete(client.sessionId);
     this.playerUserIds.delete(client.sessionId);
     if (this.state.phase === "waiting") {

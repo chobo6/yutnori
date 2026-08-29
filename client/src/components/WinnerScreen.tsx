@@ -11,8 +11,9 @@ export function WinnerScreen({
 }) {
   const winner = room.state.players.get(room.state.winnerSessionId);
 
+  // room.leave() 호출은 App.tsx의 handleLeaveLobby로 중앙화됐다(2026-08-29~) — 이유는
+  // ParticipantBar.tsx의 동일 주석 참고.
   function handleLeave() {
-    room.leave();
     onLeaveLobby();
   }
 

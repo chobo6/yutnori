@@ -1,5 +1,6 @@
 import { boot, ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { Client as ColyseusJsClient } from "colyseus.js";
 import { createGameServer } from "../createServer";
 import { MatchState } from "./MatchState";
 import { connectAsUser } from "../testUtils/connectAsUser";
@@ -822,6 +823,68 @@ describe("MatchRoom", () => {
 
       expect(room.state.phase).toBe("finished");
       expect(room.metadata?.phase).toBe("finished");
+    });
+  });
+
+  describe("재접속(2026-08-29~)", () => {
+    it("게임 진행 중 갑작스런 연결 끊김은 유예 시간 안에 재접속하면 게임 상태가 그대로 유지된다", async () => {
+      // reconnectionGraceSeconds를 짧게 줘서(5초) 테스트가 실제 20초를 기다리지 않게 한다.
+      const { room, clients } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 5 });
+      const target = clients[0];
+      const targetSessionId = target.sessionId;
+      const beforePieceCount = room.state.pieces.filter((p) => p.ownerSessionId === targetSessionId).length;
+
+      // leave(false) — colyseus.js가 LEAVE_ROOM 프로토콜 메시지 없이 연결을 바로 끊어서,
+      // 서버 onLeave가 consented=false(의도치 않은 끊김)로 받게 만드는 공식 시뮬레이션 방법
+      // (node_modules/colyseus.js/lib/Room.js의 leave() 구현 참고).
+      await target.leave(false);
+      await flush();
+      // 유예 시간(5초) 안이므로 아직 방에서 안 빠져야 한다.
+      expect(room.state.players.has(targetSessionId)).toBe(true);
+
+      const port = (colyseus.server as unknown as { port: number }).port;
+      const reconnectClient = new ColyseusJsClient(`ws://127.0.0.1:${port}`);
+      const reconnectedRoom = await reconnectClient.reconnect<MatchState>(target.reconnectionToken);
+      expect(reconnectedRoom.sessionId).toBe(targetSessionId);
+      await flush();
+
+      expect(room.state.players.has(targetSessionId)).toBe(true);
+      expect(room.state.pieces.filter((p) => p.ownerSessionId === targetSessionId).length).toBe(beforePieceCount);
+      await reconnectedRoom.leave();
+    });
+
+    it("유예 시간을 넘기면 완전히 퇴장 처리되어 방에서 빠진다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 0.2 });
+      const target = clients[0];
+      const targetSessionId = target.sessionId;
+
+      await target.leave(false);
+      await flush(500); // 유예 시간(200ms)보다 확실히 길게 대기
+
+      expect(room.state.players.has(targetSessionId)).toBe(false);
+    });
+
+    it("대기실(waiting) 단계에서 연결이 끊기면 재접속 유예 없이 즉시 자리가 빠진다", async () => {
+      const room = await colyseus.createRoom<MatchState>("match", { reconnectionGraceSeconds: 5 });
+      const clientA = await connectAsUser(colyseus, room, "대기중끊김");
+      await flush();
+      expect(room.state.players.size).toBe(1);
+
+      await clientA.leave(false);
+      await flush();
+      // phase가 여전히 "waiting"이므로, 5초짜리 유예를 줬어도 즉시 빠져야 한다.
+      expect(room.state.players.size).toBe(0);
+    });
+
+    it("관전자는 재접속 유예 없이 즉시 자리가 빠진다", async () => {
+      const { room } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 5 });
+      const spectator = await connectAsUser(colyseus, room, "관전끊김");
+      await flush();
+      expect(room.state.spectators.size).toBe(1);
+
+      await spectator.leave(false);
+      await flush();
+      expect(room.state.spectators.size).toBe(0);
     });
   });
 });

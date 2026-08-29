@@ -48,3 +48,56 @@ export function createRoom(
 export function joinRoom(roomId: string): Promise<Room<MatchState>> {
   return client.joinById<MatchState>(roomId);
 }
+
+// 게임 진행 중 갑작스런 연결 끊김(와이파이 끊김, 탭/창 닫힘 등)에서 재접속을 지원한다
+// (2026-08-29~). 탭을 완전히 닫았다 다시 열어도 남아있어야 하므로 localStorage를 쓴다
+// (sessionStorage는 탭을 닫는 순간 지워짐). 유예 시간은 server/src/rooms/MatchRoom.ts의
+// RECONNECTION_GRACE_SECONDS(20초)와 반드시 같은 값을 써야 한다 — 서버가 이미 자리를 정리한
+// 뒤에 재접속을 시도해봐야 항상 실패하므로, 클라이언트도 같은 기준으로 먼저 걸러낸다.
+const RECONNECT_STORAGE_KEY = "yutnori:reconnect";
+const RECONNECTION_GRACE_MS = 20_000;
+
+interface StoredReconnectInfo {
+  token: string;
+  savedAt: number;
+}
+
+/** 방에 처음 들어가거나 재접속에 성공할 때마다 호출해서 최신 토큰으로 갱신한다. */
+export function saveReconnectInfo(token: string): void {
+  try {
+    const info: StoredReconnectInfo = { token, savedAt: Date.now() };
+    localStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify(info));
+  } catch {
+    // localStorage를 못 쓰는 환경(프라이빗 모드 등)이어도 재접속 기능만 못 쓸 뿐,
+    // 나머지 게임 플레이는 그대로 되어야 하므로 조용히 무시한다.
+  }
+}
+
+/** "나가기"를 눌렀거나 게임이 끝났을 때 — 더 이상 재접속을 시도할 대상이 없으므로 지운다. */
+export function clearReconnectInfo(): void {
+  try {
+    localStorage.removeItem(RECONNECT_STORAGE_KEY);
+  } catch {
+    // 위와 동일한 이유로 무시.
+  }
+}
+
+/** 저장된 재접속 토큰이 있고 아직 유예 시간 안이면 반환, 아니면 null(만료분은 정리까지 함). */
+export function loadValidReconnectToken(): string | null {
+  try {
+    const raw = localStorage.getItem(RECONNECT_STORAGE_KEY);
+    if (!raw) return null;
+    const info = JSON.parse(raw) as StoredReconnectInfo;
+    if (typeof info.token !== "string" || Date.now() - info.savedAt >= RECONNECTION_GRACE_MS) {
+      localStorage.removeItem(RECONNECT_STORAGE_KEY);
+      return null;
+    }
+    return info.token;
+  } catch {
+    return null;
+  }
+}
+
+export function reconnectToRoom(token: string): Promise<Room<MatchState>> {
+  return client.reconnect<MatchState>(token);
+}
