@@ -12,6 +12,15 @@ import { getCookieValue, SESSION_COOKIE_NAME, signSession, verifySession } from 
 import { recordUserIp } from "./admin/userIps";
 import { recordVisit } from "./admin/dailyVisits";
 import { recordInquiry } from "./admin/inquiries";
+import { checkPassword, createSession, destroySession, requireAdmin } from "./admin/auth";
+import { isRateLimited, recordFailedAttempt, recordSuccessfulLogin } from "./admin/loginRateLimit";
+import { getEvents, searchEventsByNickname } from "./admin/eventLog";
+import { getChatLogs } from "./admin/chatLog";
+import { getDailyVisitStats } from "./admin/dailyVisits";
+import { adminSetNickname, listUsers, setUserBanned } from "./auth/googleAuth";
+import { getIpsForUser } from "./admin/userIps";
+import { getInquiries } from "./admin/inquiries";
+import { broadcast, subscribe } from "./admin/announcements";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** 프로덕션 Docker 이미지에서 client의 빌드 결과(client/dist)를 여기로 복사해 넣는다(Dockerfile
@@ -123,6 +132,106 @@ export function createGameServer() {
   app.post("/api/auth/logout", (_req, res) => {
     res.clearCookie(SESSION_COOKIE_NAME);
     res.status(204).end();
+  });
+
+  app.post("/api/admin/login", (req, res) => {
+    const ip = req.ip ?? "unknown";
+    if (isRateLimited(ip)) {
+      res.status(429).json({ error: "너무 많이 시도했습니다. 잠시 후 다시 시도해주세요." });
+      return;
+    }
+    const password = (req.body as { password?: unknown } | undefined)?.password;
+    if (typeof password !== "string" || !checkPassword(password)) {
+      recordFailedAttempt(ip);
+      res.status(401).json({ error: "비밀번호가 틀렸습니다." });
+      return;
+    }
+    recordSuccessfulLogin(ip);
+    const token = createSession();
+    res.cookie("admin_session", token, { httpOnly: true, secure: req.secure, sameSite: "lax" });
+    res.status(204).end();
+  });
+
+  app.post("/api/admin/logout", (req, res) => {
+    destroySession(req.cookies?.admin_session);
+    res.clearCookie("admin_session");
+    res.status(204).end();
+  });
+
+  app.get("/api/admin/rooms", requireAdmin, async (_req, res) => {
+    const rooms = await matchMaker.query({ name: "match" });
+    res.json(rooms.map((r) => ({ roomId: r.roomId, clients: r.clients, maxClients: r.maxClients, metadata: r.metadata })));
+  });
+
+  app.get("/api/admin/events", requireAdmin, (_req, res) => {
+    res.json(getEvents());
+  });
+
+  app.get("/api/admin/events/search", requireAdmin, (req, res) => {
+    const nickname = req.query.nickname;
+    if (typeof nickname !== "string" || !nickname.trim()) {
+      res.status(400).json({ error: "nickname 쿼리가 필요합니다." });
+      return;
+    }
+    res.json(searchEventsByNickname(nickname));
+  });
+
+  app.get("/api/admin/chat-logs", requireAdmin, (_req, res) => {
+    res.json(getChatLogs());
+  });
+
+  app.get("/api/admin/stats/daily-visitors", requireAdmin, (_req, res) => {
+    res.json(getDailyVisitStats());
+  });
+
+  app.get("/api/admin/users", requireAdmin, (req, res) => {
+    const offset = Number(req.query.offset) || 0;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    res.json(listUsers(offset, limit));
+  });
+
+  app.post("/api/admin/users/:id/ban", requireAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    const banned = Boolean((req.body as { banned?: unknown } | undefined)?.banned);
+    setUserBanned(userId, banned);
+    res.status(204).end();
+  });
+
+  app.post("/api/admin/users/:id/nickname", requireAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    const nickname = (req.body as { nickname?: unknown } | undefined)?.nickname;
+    if (typeof nickname !== "string" || !nickname.trim()) {
+      res.status(400).json({ error: "닉네임을 입력해주세요." });
+      return;
+    }
+    const result = adminSetNickname(userId, nickname);
+    if (result === "taken") {
+      res.status(409).json({ error: "이미 사용 중인 닉네임입니다." });
+      return;
+    }
+    res.status(204).end();
+  });
+
+  app.get("/api/admin/users/:id/ips", requireAdmin, (req, res) => {
+    res.json(getIpsForUser(Number(req.params.id)));
+  });
+
+  app.get("/api/admin/inquiries", requireAdmin, (_req, res) => {
+    res.json(getInquiries());
+  });
+
+  app.post("/api/admin/announce", requireAdmin, (req, res) => {
+    const message = (req.body as { message?: unknown } | undefined)?.message;
+    if (typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "메시지를 입력해주세요." });
+      return;
+    }
+    broadcast(message.trim());
+    res.status(204).end();
+  });
+
+  app.get("/api/announcements/stream", (req, res) => {
+    subscribe(req, res);
   });
 
   app.post("/api/inquiries", (req, res) => {
