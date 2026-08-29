@@ -1,8 +1,10 @@
 // server/src/rooms/MatchRoom.abilities.test.ts
 import { boot, ColyseusTestServer } from "@colyseus/testing";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../createServer";
 import { MatchState } from "./MatchState";
+import { connectAsUser } from "../testUtils/connectAsUser";
+import { db } from "../db/connection";
 
 function flush(ms = 20) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,17 +30,24 @@ const MO_TIMING_MS = 291;
 // "모"는 이제 이동 없이 즉시 재던지기를 유발하므로(연속 던지기 규칙), 매번 "개" 결과로 한 번 더
 // 던져 이동 가능 상태로 만든 뒤 첫 번째("모") 패를 골라 쓴다.
 
+// setupTeams는 이 파일의 유일한 접속 지점이라, 매 호출마다 서로 겹치지 않는 닉네임 4개를
+// 자동으로 생성한다(닉네임은 전역 유니크 제약이라 필요) — 테스트 각각이 개별 캐릭터 조합만
+// 신경 쓰면 되도록, 호출부에 닉네임을 일일이 넘기게 하지 않는다.
+let setupTeamsCallSeq = 0;
+
 async function setupTeams(
   colyseus: ColyseusTestServer,
   characterPicks: [string, string][],
   roomOptions: Record<string, unknown> = {},
 ) {
   const room = await colyseus.createRoom<MatchState>("match", roomOptions);
+  setupTeamsCallSeq += 1;
+  const callId = setupTeamsCallSeq;
   const clients = await Promise.all([
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
+    connectAsUser(colyseus, room, `능력${callId}-0`),
+    connectAsUser(colyseus, room, `능력${callId}-1`),
+    connectAsUser(colyseus, room, `능력${callId}-2`),
+    connectAsUser(colyseus, room, `능력${callId}-3`),
   ]);
 
   const teams = ["A", "A", "B", "B"];
@@ -69,6 +78,11 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
   });
   afterAll(async () => await colyseus.shutdown());
   afterEach(async () => await colyseus.cleanup());
+  beforeEach(() => {
+    // 닉네임이 전역 유니크 제약이라, 테스트 간에 남은 유저 레코드가 있으면 같은 문자열
+    // 닉네임을 다시 쓸 때 setNickname이 "taken"을 반환해 onAuth가 로그인 거부로 이어진다.
+    db.exec("DELETE FROM users");
+  });
 
   // turnOrder = [teamA[0], teamB[0], teamA[1], teamB[1]] (buildTurnOrder, turns.ts)에서
   // teamA[0]/teamA[1]가 clients[0]/clients[1] 중 어느 쪽인지는 join 처리 순서에 따라 달라질 수
