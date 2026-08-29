@@ -1,8 +1,10 @@
 // server/src/rooms/MatchRoom.shortcut.test.ts
 import { boot, ColyseusTestServer } from "@colyseus/testing";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../createServer";
 import { MatchState } from "./MatchState";
+import { connectAsUser } from "../testUtils/connectAsUser";
+import { db } from "../db/connection";
 
 const CHARACTERS = ["교주", "성직"];
 
@@ -10,13 +12,19 @@ function flush(ms = 50) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// setupFourPlayers는 이 파일의 유일한 접속 지점이라, 매 호출마다 서로 겹치지 않는 닉네임
+// 4개를 자동으로 생성한다(닉네임은 전역 유니크 제약이라 필요).
+let setupFourPlayersCallSeq = 0;
+
 async function setupFourPlayers(colyseus: ColyseusTestServer, roomOptions: Record<string, unknown> = {}) {
   const room = await colyseus.createRoom<MatchState>("match", roomOptions);
+  setupFourPlayersCallSeq += 1;
+  const callId = setupFourPlayersCallSeq;
   const clients = await Promise.all([
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
+    connectAsUser(colyseus, room, `지름길${callId}-0`),
+    connectAsUser(colyseus, room, `지름길${callId}-1`),
+    connectAsUser(colyseus, room, `지름길${callId}-2`),
+    connectAsUser(colyseus, room, `지름길${callId}-3`),
   ]);
 
   const teams = ["A", "A", "B", "B"];
@@ -39,6 +47,11 @@ describe("MatchRoom 지름길 통합", () => {
   });
   afterAll(async () => await colyseus.shutdown());
   afterEach(async () => await colyseus.cleanup());
+  beforeEach(() => {
+    // 닉네임이 전역 유니크 제약이라, 테스트 간에 남은 유저 레코드가 있으면 같은 문자열
+    // 닉네임을 다시 쓸 때 setNickname이 "taken"을 반환해 onAuth가 로그인 거부로 이어진다.
+    db.exec("DELETE FROM users");
+  });
 
   it("모서리에서 지름길을 타면 서버 상태가 shortcutOut으로 정확히 인코딩되고 previousPosition도 올바르게 남는다", async () => {
     // rng:()=>0 — "모" 확인 확률(50%)이 항상 성공하도록 고정한다(2026-08-25, 게이지 확인/재판정
