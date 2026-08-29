@@ -1,8 +1,10 @@
 // server/src/rooms/MatchRoom.fullGame.test.ts
 import { boot, ColyseusTestServer } from "@colyseus/testing";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createGameServer } from "../createServer";
 import type { MatchState } from "./MatchState";
+import { connectAsUser } from "../testUtils/connectAsUser";
+import { db } from "../db/connection";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
@@ -18,6 +20,11 @@ describe("MatchRoom 전체 매치 흐름", () => {
   });
   afterAll(async () => await colyseus.shutdown());
   afterEach(async () => await colyseus.cleanup());
+  beforeEach(() => {
+    // 닉네임이 전역 유니크 제약이라, 테스트 간에 남은 유저 레코드가 있으면 같은 문자열
+    // 닉네임을 다시 쓸 때 setNickname이 "taken"을 반환해 onAuth가 로그인 거부로 이어진다.
+    db.exec("DELETE FROM users");
+  });
 
   // guard가 60->200으로 늘어(연속 던지기 규칙상 "모" 체인이 진행 한 칸당 반복 횟수를 최대
   // 2~3배로 늘릴 수 있음) 최악의 경우 vitest 기본 테스트 타임아웃(5000ms)을 넘길 수 있어
@@ -27,10 +34,10 @@ describe("MatchRoom 전체 매치 흐름", () => {
     async () => {
       const room = await colyseus.createRoom<MatchState>("match", {});
       const clients = await Promise.all([
-        colyseus.connectTo(room),
-        colyseus.connectTo(room),
-        colyseus.connectTo(room),
-        colyseus.connectTo(room),
+        connectAsUser(colyseus, room, "풀게임-0"),
+        connectAsUser(colyseus, room, "풀게임-1"),
+        connectAsUser(colyseus, room, "풀게임-2"),
+        connectAsUser(colyseus, room, "풀게임-3"),
       ]);
 
       const teams = ["A", "A", "B", "B"];
