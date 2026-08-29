@@ -1,4 +1,4 @@
-import { Room, Client } from "colyseus";
+import { Room, Client, type AuthContext } from "colyseus";
 import { applyMove, samePosition, type Piece } from "../game/pieces";
 import { SHORTCUT_JUNCTIONS, type Position } from "../game/position";
 import { applyGyojuBonus, hasEffectiveCapture, resolveCaptureResponses, type CaptureRecord, type Rng } from "../game/abilities";
@@ -11,7 +11,6 @@ import {
   type YutResult,
 } from "../game/gauge";
 import { buildTurnOrder, checkWinner, nextTurnIndex } from "../game/turns";
-import { sanitizeNickname } from "../game/nickname";
 import { sanitizeRoomTitle } from "../game/roomTitle";
 import {
   MatchState,
@@ -22,6 +21,10 @@ import {
   fromSchemaPosition,
   toSchemaPosition,
 } from "./MatchState";
+import { getCookieValue, SESSION_COOKIE_NAME, verifySession } from "../auth/session";
+import { getUserById } from "../auth/googleAuth";
+import { recordEvent } from "../admin/eventLog";
+import { recordChatLog } from "../admin/chatLog";
 
 const VALID_CHARACTERS = new Set(["교주", "성직", "마담", "의사"]);
 const DEFAULT_THROW_TIMEOUT_MS = 10000;
@@ -56,6 +59,11 @@ export class MatchRoom extends Room<MatchState> {
   private playerCapacity = 4;
   /** 게임 시작 후 관전 입장을 허용할지 — 방 만들 때 결정, 기본 허용. */
   private allowSpectators = true;
+  /** 이벤트 로그(events 테이블)에 남길 방 제목 — onCreate에서 1회 설정. */
+  private roomTitle = "";
+  /** 같은 계정이 탭/기기 두 개로 같은 방에 동시에 플레이어로 들어오는 걸 막기 위한
+   * sessionId -> userId 매핑. 관전자는 여기 안 들어간다. */
+  private playerUserIds = new Map<string, number>();
 
   async onCreate(options?: {
     title?: string;
@@ -76,6 +84,7 @@ export class MatchRoom extends Room<MatchState> {
     this.maxClients = MAX_CLIENTS_WITH_SPECTATORS;
 
     const title = sanitizeRoomTitle(options?.title) || "이름 없는 방";
+    this.roomTitle = title;
     // matchMaker가 onCreate의 반환(Promise)을 기다려주므로, 방 생성 직후 바로
     // getAvailableRooms()/테스트에서 메타데이터를 조회해도 항상 최신 값이 보이도록 await한다.
     await this.setMetadata({
@@ -148,7 +157,30 @@ export class MatchRoom extends Room<MatchState> {
       const text = message.text.trim().slice(0, MAX_CHAT_LENGTH);
       if (!text) return;
       this.broadcast("chatMessage", { sessionId: client.sessionId, text });
+      recordChatLog(client.auth.nickname, text);
     });
+  }
+
+  /**
+   * Colyseus의 ws-transport가 실제 클라이언트 IP를 이미 계산해서 context.ip로 준다.
+   * IP 외에 로그인 세션도 검증한다 — WS 업그레이드 요청은 Express의 cookie-parser를
+   * 안 거치므로(Express 미들웨어 체인 밖) 쿠키 헤더를 직접 파싱한다. 세션이 없거나,
+   * 계정에 닉네임이 아직 없거나(로그인만 하고 닉네임 설정을 안 끝냄), 밴된 계정이면
+   * 입장 자체를 거부한다 — 클라이언트는 로그인+닉네임 설정을 먼저 끝내지 않으면 방
+   * 목록조차 못 보므로, 이 경로는 직접 API 호출이나 세션이 로비 중간에 만료된 경우에만
+   * 실제로 발동한다.
+   */
+  async onAuth(_client: Client, _options: unknown, context: AuthContext) {
+    const token = getCookieValue(context.headers?.cookie, SESSION_COOKIE_NAME);
+    const userId = verifySession(token);
+    const user = userId ? getUserById(userId) : undefined;
+    if (!user || !user.nickname) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    if (user.bannedAt) {
+      throw new Error("이용이 제한된 계정입니다.");
+    }
+    return { ip: context.ip, userId: user.id, nickname: user.nickname };
   }
 
   /**
@@ -156,18 +188,34 @@ export class MatchRoom extends Room<MatchState> {
    * 방)에는 관전이 허용된 경우에만 관전자로 받는다. 둘 다 안 되면 예외를 던져 입장 자체를
    * 거부한다(Colyseus가 join 요청을 reject 처리) — 2026-08-27 관전 기능 추가.
    */
-  onJoin(client: Client, options?: { nickname?: string }) {
-    const nickname = sanitizeNickname(options?.nickname) || "플레이어";
+  onJoin(client: Client) {
+    const nickname = client.auth.nickname;
+    const ip = String(client.auth.ip ?? "unknown");
 
     if (this.state.phase === "waiting") {
       if (this.state.players.size >= this.playerCapacity) {
         throw new Error("방이 가득 찼습니다");
       }
+      // 같은 계정이 탭/기기 두 개로 이미 이 방에 플레이어로 들어와 있으면 또 자리를
+      // 차지하지 못하게 막는다(관전은 이 체크와 무관).
+      if ([...this.playerUserIds.values()].includes(client.auth.userId)) {
+        throw new Error("이미 이 방에 참가 중인 계정입니다.");
+      }
       const player = new PlayerState();
       player.sessionId = client.sessionId;
       player.nickname = nickname;
       this.state.players.set(client.sessionId, player);
+      this.playerUserIds.set(client.sessionId, client.auth.userId);
       this.setMetadata({ playerCount: this.state.players.size });
+      recordEvent({
+        type: "join",
+        timestamp: Date.now(),
+        nickname,
+        roomId: this.roomId,
+        roomTitle: this.roomTitle,
+        ip,
+        sessionId: client.sessionId,
+      });
       return;
     }
 
@@ -178,17 +226,49 @@ export class MatchRoom extends Room<MatchState> {
     spectator.sessionId = client.sessionId;
     spectator.nickname = nickname;
     this.state.spectators.set(client.sessionId, spectator);
+    recordEvent({
+      type: "spectate_join",
+      timestamp: Date.now(),
+      nickname,
+      roomId: this.roomId,
+      roomTitle: this.roomTitle,
+      ip,
+      sessionId: client.sessionId,
+    });
   }
 
   onLeave(client: Client) {
-    if (this.state.spectators.has(client.sessionId)) {
+    const ip = String(client.auth?.ip ?? "unknown");
+    const spectator = this.state.spectators.get(client.sessionId);
+    if (spectator) {
       this.state.spectators.delete(client.sessionId);
+      recordEvent({
+        type: "spectate_leave",
+        timestamp: Date.now(),
+        nickname: spectator.nickname,
+        roomId: this.roomId,
+        roomTitle: this.roomTitle,
+        ip,
+        sessionId: client.sessionId,
+      });
       return;
     }
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
     this.state.players.delete(client.sessionId);
+    this.playerUserIds.delete(client.sessionId);
     if (this.state.phase === "waiting") {
       this.setMetadata({ playerCount: this.state.players.size });
     }
+    recordEvent({
+      type: "leave",
+      timestamp: Date.now(),
+      nickname: player.nickname,
+      roomId: this.roomId,
+      roomTitle: this.roomTitle,
+      ip,
+      sessionId: client.sessionId,
+    });
   }
 
   /**
