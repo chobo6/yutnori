@@ -122,7 +122,7 @@ export function AdminDashboard({
 
       <section className={styles.section}>
         <h2>최근 입장/퇴장 (최대 100개)</h2>
-        <ul>
+        <ul className={styles.logList}>
           {events.slice(-100).reverse().map((e, i) => (
             <li key={i}>
               [{new Date(e.timestamp).toLocaleString()}] {e.type} — {e.nickname} — {e.roomTitle} — {e.ip}
@@ -133,7 +133,7 @@ export function AdminDashboard({
 
       <section className={styles.section}>
         <h2>최근 채팅 로그 (최대 200개)</h2>
-        <ul>
+        <ul className={styles.logList}>
           {chatLogs.slice(0, 200).map((c, i) => (
             <li key={i}>
               [{c.createdAt}] {c.nickname}: {c.text}
@@ -149,7 +149,7 @@ export function AdminDashboard({
           <button type="submit">검색</button>
         </form>
         {searchResults && (
-          <ul>
+          <ul className={styles.logList}>
             {searchResults.map((e, i) => (
               <li key={i}>
                 [{new Date(e.timestamp).toLocaleString()}] {e.type} — {e.nickname} — {e.ip}

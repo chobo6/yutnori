@@ -79,7 +79,9 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
 
   return (
     <div className={styles.wrap}>
-      <button onClick={onBack}>← 대시보드</button>
+      <button className={styles.backButton} onClick={onBack}>
+        ← 대시보드
+      </button>
       <h1>유저 관리 ({total}명)</h1>
       <table className={styles.table}>
         <thead>
@@ -101,11 +103,17 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
               <td>{u.email ?? "-"}</td>
               <td>{u.createdAt}</td>
               <td>{u.lastLoginAt ?? "-"}</td>
-              <td>{u.bannedAt ? "밴됨" : "정상"}</td>
               <td>
-                <button onClick={() => setEditing({ id: u.id, nickname: u.nickname })}>닉네임 수정</button>
-                <button onClick={() => handleBanToggle(u.id, !u.bannedAt)}>{u.bannedAt ? "밴 해제" : "밴"}</button>
-                <button onClick={() => handleShowIps(u.id)}>IP 이력</button>
+                <span className={`${styles.pill} ${u.bannedAt ? styles.pillBanned : styles.pillOk}`}>
+                  {u.bannedAt ? "밴됨" : "정상"}
+                </span>
+              </td>
+              <td>
+                <div className={styles.actions}>
+                  <button onClick={() => setEditing({ id: u.id, nickname: u.nickname })}>닉네임 수정</button>
+                  <button onClick={() => handleBanToggle(u.id, !u.bannedAt)}>{u.bannedAt ? "밴 해제" : "밴"}</button>
+                  <button onClick={() => handleShowIps(u.id)}>IP 이력</button>
+                </div>
               </td>
             </tr>
           ))}

@@ -1,20 +1,136 @@
 .wrap {
-  font-family: system-ui, sans-serif;
   max-width: 900px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 32px 20px 60px;
+  text-align: left;
+}
+
+.wrap h1 {
+  display: inline-block;
+  font-size: 28px;
+  margin: 0 0 20px;
+  border-bottom: 3px solid;
+  border-image: var(--dancheong-band) 1;
+  padding-bottom: 10px;
 }
 
 .nav {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.nav button {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-h);
+  background: #fffdf7;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.nav button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .section {
-  margin-bottom: 2rem;
+  background: #fffdf7;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.section h2 {
+  font-size: 15px;
+  margin: 0 0 14px;
+  color: var(--text-h);
+}
+
+.section form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.section input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.section input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.section button[type="submit"] {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.section button[type="submit"]:hover:not(:disabled) {
+  background: #832324;
+}
+
+.section button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.section li {
+  font-size: 14px;
+  color: var(--text);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section li:last-child {
+  border-bottom: none;
+}
+
+/* 입퇴장/채팅/검색 로그처럼 타임스탬프가 붙는 목록만 모노스페이스로 — "로그"라는
+   느낌을 시각적으로 드러낸다. 활성 방/방문 통계처럼 요약 정보인 목록은 일반 서체 유지. */
+.logList li {
+  font-family: var(--mono);
+  font-size: 12.5px;
 }
 
 .error {
-  color: #c0392b;
+  color: var(--accent);
+  font-size: 13px;
+  margin: 0;
 }

@@ -1,26 +1,82 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(58, 46, 26, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 100;
 }
 
 .modal {
-  background: #fff;
-  padding: 1.5rem;
-  border-radius: 8px;
+  background: #fffdf7;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
   width: min(320px, 90vw);
 }
 
+.modal h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: var(--text-h);
+}
+
+.modal input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.modal input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .error {
-  color: #c0392b;
+  color: var(--accent);
+  font-size: 12.5px;
+  margin: 8px 0 0;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.actions button {
+  padding: 7px 16px;
+  font-size: 13.5px;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.actions button[type="button"] {
+  color: var(--text-h);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.actions button[type="submit"] {
+  color: #fff;
+  background: var(--accent);
+  border: none;
+}
+
+.actions button[type="submit"]:hover:not(:disabled) {
+  background: #832324;
+}
+
+.actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

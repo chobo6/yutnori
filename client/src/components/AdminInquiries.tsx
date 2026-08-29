@@ -22,7 +22,9 @@ export function AdminInquiries({ onUnauthorized, onBack }: { onUnauthorized: () 
 
   return (
     <div className={styles.wrap}>
-      <button onClick={onBack}>← 대시보드</button>
+      <button className={styles.backButton} onClick={onBack}>
+        ← 대시보드
+      </button>
       <h1>문의함 ({inquiries.length})</h1>
       <ul>
         {inquiries.map((i) => (
