@@ -967,5 +967,56 @@ describe("MatchRoom", () => {
       expect(room.state.gaugePhase).toBe("resolved");
       expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(currentTurnSessionId);
     });
+
+    it("판 위에 있는 말을 골라 직접 시작점으로 되돌릴 수 있다(첫 줄 '도' 자리 등)", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1) });
+      const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+      const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+      // 첫 줄 "도" 자리(외곽 1번)에서 온 상태 — 시작 후 첫 이동은 previousPosition이 항상 start다.
+      myPieces[0].positionKind = "outer";
+      myPieces[0].positionIndex = 1;
+      myPieces[0].previousPositionKind = "start";
+      myPieces[0].previousPositionIndex = -1;
+
+      turnClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      turnClient.send("throwRelease", {});
+      await flush();
+      const resultId = room.state.pendingResults[0].id;
+
+      turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId });
+      await flush();
+
+      expect(myPieces[0].positionKind).toBe("start");
+      expect(room.state.pendingResults.length).toBe(0);
+      expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(currentTurnSessionId);
+    });
+
+    it("시간초과 시, 판 위에 있는 말이 배열상 나중 순번이어도 그 말을 우선 골라 시작점으로 돌려보낸다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1), moveTimeoutMs: 100 });
+      const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+      const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+      // 두 번째 말만 판 위(첫 줄 "도" 자리)에 올려둔다 — 배열 순서상 뒤쪽이라, 예전 로직이면
+      // 여전히 시작점에 있는 첫 번째 말이 먼저 골라져 빽도가 아무 효과 없이 낭비됐다.
+      myPieces[1].positionKind = "outer";
+      myPieces[1].positionIndex = 1;
+      myPieces[1].previousPositionKind = "start";
+      myPieces[1].previousPositionIndex = -1;
+
+      turnClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      turnClient.send("throwRelease", {});
+      await flush();
+      expect(room.state.pendingResults.length).toBe(1); // 판 위에 말이 있으니 자동 소비 안 됨
+
+      // 아무 것도 안 하고 시간초과를 기다린다.
+      await flush(300);
+
+      expect(myPieces[0].positionKind).toBe("start"); // 원래부터 시작점, 영향 없음
+      expect(myPieces[1].positionKind).toBe("start"); // 판 위에 있던 말이 실제로 되돌아가야 함
+      expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(currentTurnSessionId);
+    });
   });
 });

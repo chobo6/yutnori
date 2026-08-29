@@ -502,15 +502,25 @@ export class MatchRoom extends Room<MatchState> {
    * 말 선택 제한시간 초과 — 가장 오래 쌓인 패로, 완주하지 않은 말 중 첫 번째를 지름길 없이 이동시킨다.
    * 가장 오래 쌓인 패가 특정 말(그룹)에만 허용된 패(예: 교주 보너스)라면 아무 말이나 골라선 안
    * 되고 그 목록 안에서 골라야 한다 — 아니면 performMove가 조용히 거부해서 턴이 멈춰버린다.
+   * 빽도는 예외적으로 판 위(대기 중도 완주도 아닌)에 있는 말을 우선 고른다 — 배열 순서대로
+   * "완주 안 한 첫 번째 말"을 그냥 고르면, 아직 대기 중인(시작점) 말이 먼저 골라져 아무
+   * 효과 없이(제자리 유지) 빽도가 낭비될 수 있다(2026-08-30 발견).
    */
   private autoMove(sessionId: string) {
     if (!this.isCurrentTurn(sessionId)) return;
     const oldestPending = this.state.pendingResults[0];
     if (!oldestPending) return; // 이론상 도달 불가 — resolved 상태는 항상 pendingResults가 있어야 진입한다.
-    const target =
-      oldestPending.restrictedToPieceIds.length > 0
-        ? this.state.pieces.find((p) => oldestPending.restrictedToPieceIds.includes(p.id))
-        : this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+    let target: PieceSchema | undefined;
+    if (oldestPending.restrictedToPieceIds.length > 0) {
+      target = this.state.pieces.find((p) => oldestPending.restrictedToPieceIds.includes(p.id));
+    } else if (oldestPending.result === "backDo") {
+      target =
+        this.state.pieces.find(
+          (p) => p.ownerSessionId === sessionId && p.positionKind !== "start" && p.positionKind !== "finished",
+        ) ?? this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+    } else {
+      target = this.state.pieces.find((p) => p.ownerSessionId === sessionId && p.positionKind !== "finished");
+    }
     if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
     this.performMove(sessionId, target.id, oldestPending.id, false);
   }
