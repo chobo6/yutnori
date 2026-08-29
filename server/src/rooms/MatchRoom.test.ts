@@ -758,6 +758,19 @@ describe("MatchRoom", () => {
     expect(logs[0]).toMatchObject({ nickname: "플레이어1", text: "플레이어입니다" });
   });
 
+  it("ping을 보내면 원래 보낸 시각과 서버의 현재 시각을 담은 pong으로 응답한다(클라이언트 시계 오차 보정용)", async () => {
+    const room = await colyseus.createRoom<MatchState>("match", {});
+    const client = await connectAsUser(colyseus, room, "핑퐁");
+
+    const pong = await new Promise<{ clientSentAt: number; serverTime: number }>((resolve) => {
+      client.onMessage("pong", resolve);
+      client.send("ping", 12345);
+    });
+
+    expect(pong.clientSentAt).toBe(12345);
+    expect(pong.serverTime).toBeGreaterThan(0);
+  });
+
   it("두 제한시간을 모두 짧게 두면 아무도 응답하지 않아도 게임이 계속 진행된다", async () => {
     const { room } = await setupFourPlayers(colyseus, { throwTimeoutMs: 20, moveTimeoutMs: 20 });
 

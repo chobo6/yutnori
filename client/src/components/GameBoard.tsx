@@ -38,11 +38,14 @@ export function GameBoard({
   room,
   selectedPieceId,
   onSelectPiece,
+  clockOffsetMs,
 }: {
   room: Room<MatchState>;
   /** 지금 선택된 내 말 — 이 말이 쌓인 패로 갈 수 있는 도착 칸들이 파란 점으로 뜬다. */
   selectedPieceId: string | null;
   onSelectPiece: (pieceId: string | null) => void;
+  /** 턴 남은 시간 표시를 서버 시계에 맞추기 위한 보정값(useMatchRoom.ts 참고). */
+  clockOffsetMs: number;
 }) {
   // 내가 던지는 사람일 때 게이지 막대는 반드시 이 로컬 시각을 기준으로 그려야 한다 — 서버가
   // 브로드캐스트하는 room.state.throwStartAt은 "내 클릭 → 서버 도착 → 상태 동기화 → 내 화면
@@ -293,7 +296,12 @@ export function GameBoard({
       </div>
 
       <div className={styles.centerOverlay}>
-        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} chainAnimatingResult={chainAnimatingResult} />
+        <TurnPanel
+          room={room}
+          chargeStartedAt={chargeStartedAt}
+          chainAnimatingResult={chainAnimatingResult}
+          clockOffsetMs={clockOffsetMs}
+        />
       </div>
     </div>
   );

@@ -176,6 +176,14 @@ export class MatchRoom extends Room<MatchState> {
       const isSpectator = this.state.spectators.has(client.sessionId);
       recordChatLog(isSpectator ? `${client.auth.nickname} (관전)` : client.auth.nickname, text);
     });
+
+    // 클라이언트가 자기 시계와 서버 시계의 오차를 추정할 때 쓰는 왕복 시간 측정용
+    // (client/src/game/clockSync.ts, songpyeon과 동일 패턴) — 로그인/게임 진행 상태와
+    // 무관하게 언제든 응답한다.
+    this.onMessage("ping", (client, clientSentAt: unknown) => {
+      if (typeof clientSentAt !== "number") return;
+      client.send("pong", { clientSentAt, serverTime: Date.now() });
+    });
   }
 
   /**

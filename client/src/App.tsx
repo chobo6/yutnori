@@ -24,7 +24,7 @@ function App() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [showInquiry, setShowInquiry] = useState(false);
   const [room, setRoom] = useState<Room<MatchState> | null>(null);
-  useMatchRoom(room);
+  const { clockOffsetMs } = useMatchRoom(room);
 
   // "나가기"/"로비로 돌아가기"처럼 의도적으로 room.leave()를 부르는 경로임을 표시하는
   // 플래그(2026-08-29~) — room.onLeave는 의도적 퇴장과 갑작스런 연결 끊김을 구분 없이
@@ -222,7 +222,12 @@ function App() {
             )}
           </div>
           <div className={styles.boardArea}>
-            <GameBoard room={room} selectedPieceId={selectedPieceId} onSelectPiece={setSelectedPieceId} />
+            <GameBoard
+              room={room}
+              selectedPieceId={selectedPieceId}
+              onSelectPiece={setSelectedPieceId}
+              clockOffsetMs={clockOffsetMs}
+            />
           </div>
         </div>
       )}

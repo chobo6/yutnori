@@ -27,12 +27,19 @@ export function TurnPanel({
   room,
   chargeStartedAt,
   chainAnimatingResult,
+  clockOffsetMs,
 }: {
   room: Room<MatchState>;
   /** 내가 던지는 중일 때만 쓰는 로컬(클라이언트) pointerdown 시각. */
   chargeStartedAt: number;
   /** 윷/모 체인 직후 짧게 결과 애니메이션을 보여주는 동안의 결과값 — null이면 평소 idle 화면. */
   chainAnimatingResult: string | null;
+  /** 서버 시계와 이 클라이언트 시계의 오차 추정값(useMatchRoom.ts/clockSync.ts 참고) —
+   * "남은 시간" 표시가 실제 서버 시간초과 시점과 어긋나지 않도록 보정하는 데 쓴다. 기기
+   * 시계가 서버보다 느리면 이 보정 없이는 실제로 이미 시간초과가 지났는데도 화면엔 아직
+   * 여유가 있는 것처럼 보여서, "내 차례인데 던지지도 못하고 넘어갔다"는 체감으로 이어졌다
+   * (2026-08-30 발견). */
+  clockOffsetMs: number;
 }) {
   const [, setTick] = useState(0);
 
@@ -43,7 +50,8 @@ export function TurnPanel({
 
   const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
   const isMyTurn = currentSessionId === room.sessionId;
-  const remainingSeconds = Math.max(0, Math.ceil((room.state.turnDeadlineAt - Date.now()) / 1000));
+  const serverNow = Date.now() + clockOffsetMs;
+  const remainingSeconds = Math.max(0, Math.ceil((room.state.turnDeadlineAt - serverNow) / 1000));
   const pendingResults = room.state.pendingResults;
 
   return (
