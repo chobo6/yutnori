@@ -17,6 +17,12 @@ const PHASE_LABEL: Record<string, string> = {
   playing: "진행중",
   finished: "종료",
 };
+const EVENT_TYPE_LABEL: Record<string, string> = {
+  join: "입장",
+  leave: "퇴장",
+  spectate_join: "관전 입장",
+  spectate_leave: "관전 퇴장",
+};
 type AdminEvent = { type: string; timestamp: number; nickname: string; roomId: string; roomTitle: string; ip: string; sessionId: string };
 type ChatLogEntry = { nickname: string; text: string; createdAt: string };
 type DailyVisitStats = { today: number; recent: { date: string; count: number }[] };
@@ -159,24 +165,54 @@ export function AdminDashboard({
 
       <section className={styles.section}>
         <h2>최근 입장/퇴장 (최대 100개)</h2>
-        <ul className={styles.logList}>
-          {events.slice(-100).reverse().map((e, i) => (
-            <li key={i}>
-              [{new Date(e.timestamp).toLocaleString()}] {e.type} — {e.nickname} — {e.roomTitle} — {e.ip}
-            </li>
-          ))}
-        </ul>
+        <div className={styles.tableScroll}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>시각</th>
+                <th>종류</th>
+                <th>닉네임</th>
+                <th>방</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.slice(-100).reverse().map((e, i) => (
+                <tr key={i}>
+                  <td>{new Date(e.timestamp).toLocaleTimeString()}</td>
+                  <td>{EVENT_TYPE_LABEL[e.type] ?? e.type}</td>
+                  <td>{e.nickname}</td>
+                  <td>{e.roomTitle}</td>
+                  <td>{e.ip}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className={styles.section}>
         <h2>최근 채팅 로그 (최대 200개)</h2>
-        <ul className={styles.logList}>
-          {chatLogs.slice(0, 200).map((c, i) => (
-            <li key={i}>
-              [{c.createdAt}] {c.nickname}: {c.text}
-            </li>
-          ))}
-        </ul>
+        <div className={styles.tableScroll}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>시각</th>
+                <th>닉네임</th>
+                <th>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chatLogs.slice(0, 200).map((c, i) => (
+                <tr key={i}>
+                  <td>{c.createdAt}</td>
+                  <td>{c.nickname}</td>
+                  <td>{c.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className={styles.section}>
@@ -185,15 +221,35 @@ export function AdminDashboard({
           <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="닉네임" />
           <button type="submit">검색</button>
         </form>
-        {searchResults && (
-          <ul className={styles.logList}>
-            {searchResults.map((e, i) => (
-              <li key={i}>
-                [{new Date(e.timestamp).toLocaleString()}] {e.type} — {e.nickname} — {e.ip}
-              </li>
-            ))}
-          </ul>
-        )}
+        {searchResults &&
+          (searchResults.length === 0 ? (
+            <p className={styles.empty}>일치하는 기록이 없습니다.</p>
+          ) : (
+            <div className={styles.tableScroll}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>일시</th>
+                    <th>종류</th>
+                    <th>닉네임</th>
+                    <th>방</th>
+                    <th>IP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchResults.map((e, i) => (
+                    <tr key={i}>
+                      <td>{new Date(e.timestamp).toLocaleString()}</td>
+                      <td>{EVENT_TYPE_LABEL[e.type] ?? e.type}</td>
+                      <td>{e.nickname}</td>
+                      <td>{e.roomTitle}</td>
+                      <td>{e.ip}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
       </section>
 
       <section className={styles.section}>
