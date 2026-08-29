@@ -1,7 +1,9 @@
 import { boot, ColyseusTestServer } from "@colyseus/testing";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGameServer } from "../createServer";
 import { MatchState } from "./MatchState";
+import { connectAsUser } from "../testUtils/connectAsUser";
+import { db } from "../db/connection";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
@@ -15,10 +17,10 @@ async function setupFourPlayers(colyseus: ColyseusTestServer, options: Record<st
   // 능력 확률까지 특정 값으로 고정해야 하는 테스트는 options로 넘겨 이 기본값을 덮어쓴다.
   const room = await colyseus.createRoom<MatchState>("match", { rng: () => 0.3, ...options });
   const clients = await Promise.all([
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
-    colyseus.connectTo(room),
+    connectAsUser(colyseus, room, "플레이어1"),
+    connectAsUser(colyseus, room, "플레이어2"),
+    connectAsUser(colyseus, room, "플레이어3"),
+    connectAsUser(colyseus, room, "플레이어4"),
   ]);
 
   const teams = ["A", "A", "B", "B"];
@@ -60,6 +62,11 @@ describe("MatchRoom", () => {
   });
   afterAll(async () => await colyseus.shutdown());
   afterEach(async () => await colyseus.cleanup());
+  beforeEach(() => {
+    // 닉네임이 전역 유니크 제약이라, 테스트 간에 남은 유저 레코드가 있으면 같은 문자열
+    // 닉네임을 다시 쓸 때 setNickname이 "taken"을 반환해 onAuth가 로그인 거부로 이어진다.
+    db.exec("DELETE FROM users");
+  });
 
   it("4명이 팀/캐릭터를 정하고 준비하면 게임이 시작된다", async () => {
     const { room } = await setupFourPlayers(colyseus);
@@ -70,8 +77,8 @@ describe("MatchRoom", () => {
 
   it("1v1 모드에서는 2명(팀당 1명)이 캐릭터 4종씩 고르고 준비하면 게임이 시작되고 말이 8개(4개씩) 생긴다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    const clientA = await colyseus.connectTo(room);
-    const clientB = await colyseus.connectTo(room);
+    const clientA = await connectAsUser(colyseus, room, "1v1시작A");
+    const clientB = await connectAsUser(colyseus, room, "1v1시작B");
 
     clientA.send("pickTeam", { team: "A" });
     clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
@@ -92,8 +99,8 @@ describe("MatchRoom", () => {
 
   it("1v1 모드에서 두 명 다 같은 팀을 고르면(팀 분배가 안 맞으면) 게임이 시작되지 않는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    const clientA = await colyseus.connectTo(room);
-    const clientB = await colyseus.connectTo(room);
+    const clientA = await connectAsUser(colyseus, room, "팀안맞음A");
+    const clientB = await connectAsUser(colyseus, room, "팀안맞음B");
 
     clientA.send("pickTeam", { team: "A" });
     clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
@@ -110,8 +117,8 @@ describe("MatchRoom", () => {
 
   it("ready 이후 마지막 조건(pickCharacters)이 채워지면 추가 ready 없이도 게임이 시작된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    const clientA = await colyseus.connectTo(room);
-    const clientB = await colyseus.connectTo(room);
+    const clientA = await connectAsUser(colyseus, room, "레디A");
+    const clientB = await connectAsUser(colyseus, room, "레디B");
 
     clientA.send("pickTeam", { team: "A" });
     clientB.send("pickTeam", { team: "B" });
@@ -316,7 +323,7 @@ describe("MatchRoom", () => {
 
   it("payload가 없거나 형식이 잘못된 메시지는 방을 죽이지 않고 무시된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "잘못된페이로드");
 
     client.send("pickTeam"); // payload 자체가 없음
     client.send("pickTeam", { team: "C" });
@@ -338,7 +345,7 @@ describe("MatchRoom", () => {
 
   it("1v1 모드에서는 캐릭터 4종을 골라야 반영된다(2종은 무시)", async () => {
     const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "1v1캐릭터4종");
 
     client.send("pickCharacters", { characters: ["교주", "성직"] });
     await flush();
@@ -356,7 +363,7 @@ describe("MatchRoom", () => {
 
   it("1v1 모드에서는 캐릭터 중복이 허용된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", { mode: "1v1" });
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "1v1캐릭터중복");
 
     client.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
     await flush();
@@ -370,7 +377,7 @@ describe("MatchRoom", () => {
 
   it("2v2 모드(기본값)에서는 캐릭터 중복이 거부된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "2v2캐릭터중복");
 
     client.send("pickCharacters", { characters: ["교주", "교주"] });
     await flush();
@@ -398,14 +405,20 @@ describe("MatchRoom", () => {
     expect(room.metadata?.title).toBe("이름 없는 방");
   });
 
-  it("입장 시 넘긴 nickname이 정제되어 저장되고, 없으면 기본값이 붙는다", async () => {
+  // 2026-08-29(Task 11) 이전에는 connectTo의 { nickname } 접속 옵션을 방(room)이 직접 정제해
+  // 저장했고, 안 넘기면 "플레이어" 기본값이 붙었다. onAuth 도입 이후 nickname은 항상 로그인된
+  // 계정의 DB 레코드(client.auth.nickname)에서만 오고 접속 옵션은 더 이상 읽지 않으므로,
+  // "닉네임을 안 주면 기본값" 분기 자체가 코드에서 사라졌다 — 대신 setNickname(계정 가입 시
+  // 1회 설정)이 같은 정제(trim) 로직을 거치는지를, 실제 로그인 접속 경로(connectAsUser)를
+  // 통해 확인한다.
+  it("입장한 유저의 nickname은 계정에 저장된(가입 시 정제된) 값이 그대로 반영된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const withNickname = await colyseus.connectTo(room, { nickname: "  둘리  " });
-    const withoutNickname = await colyseus.connectTo(room, {});
+    const withTrimmedNickname = await connectAsUser(colyseus, room, "  둘리  ");
+    const withPlainNickname = await connectAsUser(colyseus, room, "새싹");
     await flush();
 
-    expect(room.state.players.get(withNickname.sessionId)!.nickname).toBe("둘리");
-    expect(room.state.players.get(withoutNickname.sessionId)!.nickname).toBe("플레이어");
+    expect(room.state.players.get(withTrimmedNickname.sessionId)!.nickname).toBe("둘리");
+    expect(room.state.players.get(withPlainNickname.sessionId)!.nickname).toBe("새싹");
   });
 
   it("게임이 시작되면 방은 잠기지 않지만(관전 입장을 막지 않기 위해) metadata.phase가 바뀐다(2026-08-27 관전 기능)", async () => {
@@ -416,7 +429,7 @@ describe("MatchRoom", () => {
 
   it("핸들러 안에서 예외가 나도 onUncaughtException이 막아 방이 살아남는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "예외테스트");
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // 어떤 이유로든 핸들러 내부에서 예외가 터지는 상황을 강제한다.
@@ -639,8 +652,8 @@ describe("MatchRoom", () => {
 
   it("sendChat을 보내면 모든 클라이언트가 chatMessage 브로드캐스트를 받는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const clientA = await colyseus.connectTo(room);
-    const clientB = await colyseus.connectTo(room);
+    const clientA = await connectAsUser(colyseus, room, "채팅A");
+    const clientB = await connectAsUser(colyseus, room, "채팅B");
 
     const receivedByB: Array<{ sessionId: string; text: string }> = [];
     clientB.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => receivedByB.push(msg));
@@ -653,7 +666,7 @@ describe("MatchRoom", () => {
 
   it("보낸 사람 본인도 자기 chatMessage 브로드캐스트를 받는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "채팅본인");
 
     const received: Array<{ sessionId: string; text: string }> = [];
     client.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => received.push(msg));
@@ -666,8 +679,8 @@ describe("MatchRoom", () => {
 
   it("앞뒤 공백은 제거되고, 너무 긴 채팅은 200자로 잘린다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const clientA = await colyseus.connectTo(room);
-    const clientB = await colyseus.connectTo(room);
+    const clientA = await connectAsUser(colyseus, room, "채팅공백A");
+    const clientB = await connectAsUser(colyseus, room, "채팅공백B");
 
     const received: Array<{ sessionId: string; text: string }> = [];
     clientB.onMessage("chatMessage", (msg: { sessionId: string; text: string }) => received.push(msg));
@@ -682,7 +695,7 @@ describe("MatchRoom", () => {
 
   it("빈 문자열이거나 잘못된 형식의 sendChat은 무시된다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "채팅빈값");
 
     const received: unknown[] = [];
     client.onMessage("chatMessage", (msg: unknown) => received.push(msg));
@@ -697,7 +710,7 @@ describe("MatchRoom", () => {
 
   it("대기실(waiting) 단계에서도 채팅을 보낼 수 있다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
-    const client = await colyseus.connectTo(room);
+    const client = await connectAsUser(colyseus, room, "대기실채팅");
 
     const received: unknown[] = [];
     client.onMessage("chatMessage", (msg: unknown) => received.push(msg));
@@ -727,7 +740,7 @@ describe("MatchRoom", () => {
       const { room } = await setupFourPlayers(colyseus);
       const beforePlayerCount = room.state.players.size;
 
-      const spectatorClient = await colyseus.connectTo(room);
+      const spectatorClient = await connectAsUser(colyseus, room, "관전자등록");
       await flush();
 
       expect(room.state.players.size).toBe(beforePlayerCount); // 플레이어 수는 그대로
@@ -737,7 +750,7 @@ describe("MatchRoom", () => {
 
     it("관전자가 나가면 spectators에서만 빠지고 players는 영향 없다", async () => {
       const { room } = await setupFourPlayers(colyseus);
-      const spectatorClient = await colyseus.connectTo(room);
+      const spectatorClient = await connectAsUser(colyseus, room, "관전자퇴장");
       await flush();
       expect(room.state.spectators.size).toBe(1);
 
@@ -751,30 +764,30 @@ describe("MatchRoom", () => {
     it("방 만들 때 allowSpectators:false를 주면 게임 시작 후 새 입장이 거부된다", async () => {
       const { room } = await setupFourPlayers(colyseus, { allowSpectators: false });
 
-      await expect(colyseus.connectTo(room)).rejects.toThrow();
+      await expect(connectAsUser(colyseus, room, "관전거부")).rejects.toThrow();
       expect(room.state.spectators.size).toBe(0);
     });
 
     it("대기 중인 방이 꽉 차면(자리 4개 다 참) 5번째 입장은 거부된다", async () => {
       const room = await colyseus.createRoom<MatchState>("match", {});
-      await colyseus.connectTo(room);
-      await colyseus.connectTo(room);
-      await colyseus.connectTo(room);
-      await colyseus.connectTo(room);
+      await connectAsUser(colyseus, room, "가득참1");
+      await connectAsUser(colyseus, room, "가득참2");
+      await connectAsUser(colyseus, room, "가득참3");
+      await connectAsUser(colyseus, room, "가득참4");
       await flush();
       expect(room.state.players.size).toBe(4);
 
       // 아직 phase는 "waiting"(4명 다 team/character/ready를 안 채웠으므로) — 이 상태에서
       // 5번째는 관전자가 아니라 거부되어야 한다(대기 중엔 관전 개념이 없다).
       expect(room.state.phase).toBe("waiting");
-      await expect(colyseus.connectTo(room)).rejects.toThrow();
+      await expect(connectAsUser(colyseus, room, "가득참5")).rejects.toThrow();
     });
 
     it("플레이어가 들어오고 나갈 때마다 메타데이터의 playerCount가 갱신된다", async () => {
       const room = await colyseus.createRoom<MatchState>("match", {});
       expect(room.metadata?.playerCount).toBe(0);
 
-      const client = await colyseus.connectTo(room);
+      const client = await connectAsUser(colyseus, room, "카운트갱신");
       await flush();
       expect(room.metadata?.playerCount).toBe(1);
 
