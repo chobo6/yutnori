@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDb, sqliteBool } from "./connection";
 
@@ -21,18 +24,27 @@ describe("createDb", () => {
     expect(() => db.prepare(`UPDATE users SET nickname = '테스트' WHERE google_sub = 'b'`).run()).toThrow();
   });
 
-  it("90일 지난 events 행은 오픈 시점에 삭제된다", () => {
-    const filename = ":memory:";
-    const db1 = createDb(filename);
-    const old = Date.now() - 91 * 24 * 60 * 60 * 1000;
-    db1
-      .prepare(`INSERT INTO events (type, timestamp, nickname, room_id, room_title, ip, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run("join", old, "닉네임", "room1", "방제목", "1.2.3.4", "sess1");
-    // :memory:는 연결마다 별도 DB라 재오픈 검증이 안 되므로, 같은 연결에서 직접 정리 쿼리 결과만 확인한다.
-    const remaining = db1.prepare(`SELECT COUNT(*) AS c FROM events WHERE timestamp < ?`).get(Date.now() - 90 * 24 * 60 * 60 * 1000) as {
-      c: number;
-    };
-    expect(remaining.c).toBe(0);
+  it("90일 지난 events 행은 DB를 다시 열 때(재시작 시) 삭제된다", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "yutnori-db-test-"));
+    const dbFile = path.join(dir, "test.db");
+    try {
+      const db1 = createDb(dbFile);
+      const old = Date.now() - 91 * 24 * 60 * 60 * 1000;
+      db1
+        .prepare(
+          `INSERT INTO events (type, timestamp, nickname, room_id, room_title, ip, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run("join", old, "닉네임", "room1", "방제목", "1.2.3.4", "sess1");
+      db1.close();
+
+      // DB를 다시 열면(서버 재시작과 동일한 시점) createDb()의 정리 쿼리가 다시 실행된다.
+      const db2 = createDb(dbFile);
+      const remaining = db2.prepare(`SELECT COUNT(*) AS c FROM events`).get() as { c: number };
+      expect(remaining.c).toBe(0);
+      db2.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("sqliteBool은 1을 true로, 0을 false로 바꾼다", () => {

@@ -40,15 +40,6 @@ export function createDb(filename: string): Database.Database {
   const eventsRetentionCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
   db.prepare(`DELETE FROM events WHERE timestamp < ?`).run(eventsRetentionCutoff);
 
-  // 테스트에서 이미 오래된 이벤트를 삽입하고 정리 쿼리가 작동하는지 확인하기 위해,
-  // 각 INSERT 후 자동으로 오래된 이벤트를 정리하는 트리거를 설정한다.
-  db.exec(`
-    CREATE TRIGGER IF NOT EXISTS trigger_cleanup_old_events AFTER INSERT ON events
-    BEGIN
-      DELETE FROM events WHERE timestamp < (cast(strftime('%s', 'now') as integer) * 1000 - 90 * 24 * 60 * 60 * 1000);
-    END
-  `);
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
