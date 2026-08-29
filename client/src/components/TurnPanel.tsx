@@ -16,17 +16,24 @@ import { YutStaticSticks } from "./YutStaticSticks";
  * 순수 표시용이다.
  *
  * 게이지/결과 연출은 내 턴이 아니어도 항상 보인다(2026-08-29~, 사용자 요청) — 던지는 사람만
- * 보던 걸 다른 플레이어도 실시간으로 구경할 수 있어야 한다. 게이지 막대 시작 시각도 더 이상
- * 던진 사람의 로컬 pointerdown 시각(chargeStartedAt)이 아니라 서버가 브로드캐스트하는
- * room.state.throwStartAt을 쓴다 — 다른 플레이어는 애초에 pointerdown을 누르지 않아 로컬
- * 시각을 가질 수 없기 때문("보드를 꾹 누르고 있다가 떼세요" 조작 안내 문구만 내 턴 전용으로
- * 남겨둔다).
+ * 보던 걸 다른 플레이어도 실시간으로 구경할 수 있어야 한다. 다만 게이지 막대의 시작 시각은
+ * 내 턴이냐 아니냐로 다른 값을 쓴다: 내가 던지는 중이면 내 로컬 pointerdown 시각
+ * (chargeStartedAt, GameBoard가 넘겨줌)을, 남의 턴을 구경할 때는 서버가 브로드캐스트하는
+ * room.state.throwStartAt을 쓴다. 처음엔 구경꾼 쪽을 맞추려고 항상 throwStartAt 하나로
+ * 통일했었는데, 그러면 던지는 사람 본인도 "클릭 → 서버 도착 → 상태 동기화" 왕복 지연만큼
+ * 뒤늦은 시각을 기준으로 게이지가 그려져서 600ms 주기에서는 무시 못 할 오차가 생겨 "눈으로
+ * 맞춘 것 같은데 서버 판정은 다르게 나온다"는 문제가 생겼다 — 로컬 시각을 쓰면 그 지연이
+ * 서버의 실제 판정(resolveThrow가 쓰는 서버 시각 기준 경과시간)과 거의 상쇄되므로 본인에게는
+ * 다시 로컬 시각을 써야 한다.
  */
 export function TurnPanel({
   room,
+  chargeStartedAt,
   chainAnimatingResult,
 }: {
   room: Room<MatchState>;
+  /** 내가 던지는 중일 때만 쓰는 로컬(클라이언트) pointerdown 시각. */
+  chargeStartedAt: number;
   /** 윷/모 체인 직후 짧게 결과 애니메이션을 보여주는 동안의 결과값 — null이면 평소 idle 화면. */
   chainAnimatingResult: string | null;
 }) {
@@ -64,9 +71,12 @@ export function TurnPanel({
         </>
       )}
 
-      {/* 게이지 막대는 순수 시각 힌트 — 실제 결과는 서버가 재계산한 값을 따른다. 서버가
-          브로드캐스트하는 throwStartAt을 기준으로 그리므로 던진 사람이 아니어도 똑같이 보인다. */}
-      {room.state.gaugePhase === "charging" && <GaugeBar startedAt={room.state.throwStartAt} />}
+      {/* 게이지 막대는 순수 시각 힌트 — 실제 결과는 서버가 재계산한 값을 따른다. 내 턴이면
+          정확도를 위해 로컬 시각을, 구경하는 입장이면 서버 브로드캐스트 시각을 기준으로 그린다
+          (위 컴포넌트 설명 참고). */}
+      {room.state.gaugePhase === "charging" && (
+        <GaugeBar startedAt={isMyTurn ? chargeStartedAt : room.state.throwStartAt} />
+      )}
 
       {room.state.gaugePhase === "resolved" && (
         <div>

@@ -44,6 +44,16 @@ export function GameBoard({
   selectedPieceId: string | null;
   onSelectPiece: (pieceId: string | null) => void;
 }) {
+  // 내가 던지는 사람일 때 게이지 막대는 반드시 이 로컬 시각을 기준으로 그려야 한다 — 서버가
+  // 브로드캐스트하는 room.state.throwStartAt은 "내 클릭 → 서버 도착 → 상태 동기화 → 내 화면
+  // 반영"까지의 왕복 지연만큼 항상 뒤늦게 이 화면에 반영되는데, 600ms 주기 게이지에서 그 지연은
+  // 결코 무시할 수 없다(2026-08-29에 다른 플레이어도 애니메이션을 보게 하려고 throwStartAt으로
+  // 한 번 통일했다가, 정확히 이 이유로 "체감상 맞춘 것 같은데 안 뜬다"는 버그가 재발함 — 서버의
+  // 실제 판정(resolveThrow)은 내 로컬 pointerdown~pointerup 구간과 거의 같은 지연 상쇄 효과를
+  // 받지만, 화면에 그리는 시작점을 서버 시각으로 바꾸는 순간 그 상쇄가 깨진다). 그래서 내 턴일
+  // 때만 이 로컬 chargeStartedAt을 쓰고, 남의 턴을 구경할 때만 room.state.throwStartAt을 쓴다
+  // (TurnPanel.tsx) — 구경하는 입장에서는 애초에 로컬 pointerdown이 없어 정확도가 문제되지 않는다.
+  const [chargeStartedAt, setChargeStartedAt] = useState(0);
   const isChargingRef = useRef(false);
   const abilityBubbles = useAbilityBubbles(room);
   const pieceAnimations = usePieceAnimations(room);
@@ -84,6 +94,7 @@ export function GameBoard({
     if (chainAnimatingResult !== null) return; // 체인 애니메이션 보여주는 동안은 다음 던지기를 막는다
     const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
     if (currentSessionId !== room.sessionId) return;
+    setChargeStartedAt(Date.now());
     isChargingRef.current = true;
     room.send("throwStart", {});
     // 포인터를 보드 루트에 캡처해둔다 — GameBoard는 게임 내내 계속 마운트돼 있으므로
@@ -282,7 +293,7 @@ export function GameBoard({
       </div>
 
       <div className={styles.centerOverlay}>
-        <TurnPanel room={room} chainAnimatingResult={chainAnimatingResult} />
+        <TurnPanel room={room} chargeStartedAt={chargeStartedAt} chainAnimatingResult={chainAnimatingResult} />
       </div>
     </div>
   );
