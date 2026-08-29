@@ -51,6 +51,7 @@ const BACK_DO_CHANCE = 0.25;
  * 그대로 인정되고 절반은 재판정된다), 절대적인 확정이 아니게 됐다.
  */
 const CONFIRM_CHANCE: Record<YutResult, number> = {
+  backDo: 0.7,
   do: 0.7,
   gae: 0.7,
   geol: 0.7,
