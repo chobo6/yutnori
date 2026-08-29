@@ -6,6 +6,23 @@
   gap: 16px;
 }
 
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nickname {
+  font-weight: 600;
+}
+
 .row {
   display: flex;
   justify-content: space-between;

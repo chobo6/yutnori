@@ -1,10 +1,12 @@
 // client/src/App.tsx
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Room } from "colyseus.js";
 import type { MatchState } from "./game/matchTypes";
 import { useMatchRoom } from "./game/useMatchRoom";
-import { getStoredNickname } from "./game/nickname";
-import { NicknameGate } from "./components/NicknameGate";
+import { fetchMe, loginWithGoogle, logout, type Profile } from "./game/auth";
+import { GoogleLoginScreen } from "./components/GoogleLoginScreen";
+import { NicknameSetupScreen } from "./components/NicknameSetupScreen";
+import { InquiryModal } from "./components/InquiryModal";
 import { RoomList } from "./components/RoomList";
 import { WaitingRoom } from "./components/WaitingRoom";
 import { GameBoard } from "./components/GameBoard";
@@ -16,9 +18,25 @@ import { assignCorners } from "./game/cornerSlots";
 import styles from "./App.module.css";
 
 function App() {
-  const [nickname, setNickname] = useState<string | null>(() => getStoredNickname());
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined); // undefined = 아직 확인 전
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [showInquiry, setShowInquiry] = useState(false);
   const [room, setRoom] = useState<Room<MatchState> | null>(null);
   useMatchRoom(room);
+
+  useEffect(() => {
+    fetchMe().then(setProfile);
+  }, []);
+
+  const handleCredential = useCallback(async (credential: string) => {
+    setLoginError(null);
+    try {
+      const p = await loginWithGoogle(credential);
+      setProfile(p);
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
+    }
+  }, []);
 
   // 이동할 말을 보드/코너에서 직접 선택하는 UI(마피아42 실제 게임처럼 말 선택 -> 도착 칸이
   // 파란 점으로 표시)를 위한 선택 상태 — GameBoard와 PlayerCorner 둘 다 대기 중인 말도
@@ -30,12 +48,38 @@ function App() {
     if (room && room.state?.gaugePhase !== "resolved") setSelectedPieceId(null);
   }, [room, room?.state?.gaugePhase]);
 
-  if (!nickname) {
-    return <NicknameGate onDone={setNickname} />;
+  if (profile === undefined) {
+    return <p>불러오는 중...</p>;
+  }
+
+  if (profile === null) {
+    return <GoogleLoginScreen onCredential={handleCredential} error={loginError} />;
+  }
+
+  if (!profile.nickname) {
+    return <NicknameSetupScreen onDone={(nickname) => setProfile({ ...profile, nickname })} />;
+  }
+
+  const nickname = profile.nickname;
+
+  async function handleLogout() {
+    await logout();
+    setProfile(null);
+    setRoom(null);
   }
 
   if (!room) {
-    return <RoomList nickname={nickname} onRoomJoined={setRoom} />;
+    return (
+      <>
+        <RoomList
+          nickname={nickname}
+          onRoomJoined={setRoom}
+          onLogout={handleLogout}
+          onOpenInquiry={() => setShowInquiry(true)}
+        />
+        {showInquiry && <InquiryModal onClose={() => setShowInquiry(false)} />}
+      </>
+    );
   }
 
   // create()/joinById()는 시트 예약이 끝나면 바로 resolve되고, 초기 state 전체 동기화는

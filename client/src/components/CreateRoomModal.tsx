@@ -5,11 +5,9 @@ import { createRoom } from "../colyseus";
 import styles from "./CreateRoomModal.module.css";
 
 export function CreateRoomModal({
-  nickname,
   onCreated,
   onClose,
 }: {
-  nickname: string;
   onCreated: (room: Room<MatchState>) => void;
   onClose: () => void;
 }) {
@@ -23,7 +21,7 @@ export function CreateRoomModal({
     if (creating) return;
     setCreating(true);
     try {
-      const room = await createRoom(title, mode, nickname, allowSpectators);
+      const room = await createRoom(title, mode, allowSpectators);
       onCreated(room);
     } catch (err) {
       console.error("방 생성 실패", err);

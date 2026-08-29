@@ -20,9 +20,13 @@ function joinButtonState(meta: RoomMeta | undefined): { label: string; disabled:
 export function RoomList({
   nickname,
   onRoomJoined,
+  onLogout,
+  onOpenInquiry,
 }: {
   nickname: string;
   onRoomJoined: (room: Room<MatchState>) => void;
+  onLogout: () => void;
+  onOpenInquiry: () => void;
 }) {
   const [rooms, setRooms] = useState<RoomAvailable<RoomMeta>[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -50,7 +54,7 @@ export function RoomList({
     if (joiningId) return;
     setJoiningId(roomId);
     try {
-      const room = await joinRoom(roomId, nickname);
+      const room = await joinRoom(roomId);
       onRoomJoined(room);
     } catch (err) {
       console.error("방 입장 실패", err);
@@ -60,7 +64,18 @@ export function RoomList({
 
   return (
     <div className={styles.wrap}>
-      <h2>방 목록</h2>
+      <div className={styles.header}>
+        <h2>방 목록</h2>
+        <div className={styles.headerActions}>
+          <span className={styles.nickname}>{nickname}님</span>
+          <button type="button" onClick={onOpenInquiry}>
+            문의하기
+          </button>
+          <button type="button" onClick={onLogout}>
+            로그아웃
+          </button>
+        </div>
+      </div>
       <button type="button" onClick={() => setShowCreate(true)}>
         방 만들기
       </button>
@@ -87,11 +102,7 @@ export function RoomList({
         );
       })}
       {showCreate && (
-        <CreateRoomModal
-          nickname={nickname}
-          onCreated={onRoomJoined}
-          onClose={() => setShowCreate(false)}
-        />
+        <CreateRoomModal onCreated={onRoomJoined} onClose={() => setShowCreate(false)} />
       )}
     </div>
   );

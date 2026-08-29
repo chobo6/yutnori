@@ -29,7 +29,7 @@ export interface RoomMeta {
 }
 
 export async function listRooms(): Promise<RoomAvailable<RoomMeta>[]> {
-  const res = await fetch(`${httpUrl}/api/rooms`);
+  const res = await fetch(`${httpUrl}/api/rooms`, { credentials: "same-origin" });
   if (!res.ok) throw new Error(`방 목록 조회 실패: ${res.status}`);
   return res.json();
 }
@@ -37,12 +37,11 @@ export async function listRooms(): Promise<RoomAvailable<RoomMeta>[]> {
 export function createRoom(
   title: string,
   mode: "2v2" | "1v1",
-  nickname: string,
   allowSpectators: boolean,
 ): Promise<Room<MatchState>> {
-  return client.create<MatchState>("match", { title, mode, nickname, allowSpectators });
+  return client.create<MatchState>("match", { title, mode, allowSpectators });
 }
 
-export function joinRoom(roomId: string, nickname: string): Promise<Room<MatchState>> {
-  return client.joinById<MatchState>(roomId, { nickname });
+export function joinRoom(roomId: string): Promise<Room<MatchState>> {
+  return client.joinById<MatchState>(roomId);
 }

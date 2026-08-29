@@ -12,3 +12,9 @@
   border: 1px solid #8a7550;
   border-radius: 6px;
 }
+
+.error {
+  color: var(--accent);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
