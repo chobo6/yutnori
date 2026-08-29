@@ -185,13 +185,17 @@ export function createGameServer() {
   });
 
   app.get("/api/admin/users", requireAdmin, (req, res) => {
-    const offset = Number(req.query.offset) || 0;
-    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 20), 100);
     res.json(listUsers(offset, limit));
   });
 
   app.post("/api/admin/users/:id/ban", requireAdmin, (req, res) => {
     const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: "잘못된 유저 ID입니다." });
+      return;
+    }
     const banned = Boolean((req.body as { banned?: unknown } | undefined)?.banned);
     setUserBanned(userId, banned);
     res.status(204).end();
@@ -199,6 +203,10 @@ export function createGameServer() {
 
   app.post("/api/admin/users/:id/nickname", requireAdmin, (req, res) => {
     const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: "잘못된 유저 ID입니다." });
+      return;
+    }
     const nickname = (req.body as { nickname?: unknown } | undefined)?.nickname;
     if (typeof nickname !== "string" || !nickname.trim()) {
       res.status(400).json({ error: "닉네임을 입력해주세요." });
@@ -213,7 +221,12 @@ export function createGameServer() {
   });
 
   app.get("/api/admin/users/:id/ips", requireAdmin, (req, res) => {
-    res.json(getIpsForUser(Number(req.params.id)));
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: "잘못된 유저 ID입니다." });
+      return;
+    }
+    res.json(getIpsForUser(userId));
   });
 
   app.get("/api/admin/inquiries", requireAdmin, (_req, res) => {
