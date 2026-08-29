@@ -88,6 +88,7 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
           <tr>
             <th>ID</th>
             <th>닉네임</th>
+            <th>이름</th>
             <th>이메일</th>
             <th>가입일</th>
             <th>최근 로그인</th>
@@ -100,6 +101,7 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
             <tr key={u.id}>
               <td>{u.id}</td>
               <td>{u.nickname ?? "(미설정)"}</td>
+              <td>{u.name ?? "-"}</td>
               <td>{u.email ?? "-"}</td>
               <td>{u.createdAt}</td>
               <td>{u.lastLoginAt ?? "-"}</td>
