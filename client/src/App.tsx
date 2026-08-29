@@ -11,7 +11,7 @@ import { GameBoard } from "./components/GameBoard";
 import { PlayerCorner } from "./components/PlayerCorner";
 import { WinnerScreen } from "./components/WinnerScreen";
 import { ParticipantBar } from "./components/ParticipantBar";
-import { ChatInput } from "./components/ChatInput";
+import { ChatBox } from "./components/ChatBox";
 import { assignCorners } from "./game/cornerSlots";
 import styles from "./App.module.css";
 
@@ -51,7 +51,7 @@ function App() {
 
   return (
     <div>
-      {/* 대기실/플레이/종료 단계와 무관하게 항상 표시 — 채팅 말풍선이 뜰 자리 겸 채팅 입력창. */}
+      {/* 대기실/플레이/종료 단계와 무관하게 항상 표시 — 참가자/관전자 아바타 + 나가기 버튼. */}
       <ParticipantBar room={room} onLeaveLobby={() => setRoom(null)} />
 
       {room.state.phase === "waiting" && <WaitingRoom room={room} />}
@@ -108,7 +108,9 @@ function App() {
         <WinnerScreen room={room} onLeaveLobby={() => setRoom(null)} />
       )}
 
-      <ChatInput room={room} />
+      {/* 대기실/플레이 화면 어디서든 항상 같은 자리(우하단)에 떠 있는 채팅창(2026-08-29~) —
+          songpyeon처럼 지금까지의 채팅을 스크롤해서 볼 수 있다(예전엔 아바타 위 3초짜리 말풍선). */}
+      <ChatBox room={room} />
     </div>
   );
 }

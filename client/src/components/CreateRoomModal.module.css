@@ -5,14 +5,135 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 100;
 }
 
 .modal {
+  width: 100%;
+  max-width: 340px;
   background: #fffdf7;
-  border-radius: 8px;
-  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 22px 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-width: 280px;
+  gap: 16px;
+  text-align: left;
+}
+
+.title {
+  margin: 0 0 4px;
+  padding-bottom: 12px;
+  color: var(--text-h);
+  border-bottom: 3px solid transparent;
+  border-image: var(--dancheong-band) 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.titleInput {
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-h);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+}
+
+.modeRow {
+  display: flex;
+  gap: 8px;
+}
+
+.modeButton {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.modeSelected {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* "나가기"(ParticipantBar)와 동일한 보조 버튼 스타일(2026-08-29) — 취소·이탈처럼 진행을
+ * 멈추는 액션은 항상 이 조용한(테두리만 있는) 버튼으로 통일한다. */
+.cancelButton {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text-h);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cancelButton:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.submitButton {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.submitButton:hover {
+  background: #832324;
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
