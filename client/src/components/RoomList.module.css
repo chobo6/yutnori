@@ -36,3 +36,47 @@
   color: var(--accent);
   font-size: 0.85rem;
 }
+
+/* CreateRoomModal의 .cancelButton/.submitButton과 동일한 보조/주요 버튼 스타일 —
+   방만들기/문의하기/방 입장 버튼을 전부 이 두 톤으로 통일한다. */
+.secondaryButton {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--text-h);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.secondaryButton:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.primaryButton {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #832324;
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

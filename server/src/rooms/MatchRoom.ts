@@ -94,6 +94,7 @@ export class MatchRoom extends Room<MatchState> {
       allowSpectators: this.allowSpectators,
       playerCount: 0,
       playerCapacity: this.playerCapacity,
+      nicknames: [] as string[],
     });
 
     if (typeof options?.throwTimeoutMs === "number") this.throwTimeoutMs = options.throwTimeoutMs;
@@ -206,7 +207,10 @@ export class MatchRoom extends Room<MatchState> {
       player.nickname = nickname;
       this.state.players.set(client.sessionId, player);
       this.playerUserIds.set(client.sessionId, client.auth.userId);
-      this.setMetadata({ playerCount: this.state.players.size });
+      this.setMetadata({
+        playerCount: this.state.players.size,
+        nicknames: [...this.state.players.values()].map((p) => p.nickname),
+      });
       recordEvent({
         type: "join",
         timestamp: Date.now(),
@@ -258,7 +262,10 @@ export class MatchRoom extends Room<MatchState> {
     this.state.players.delete(client.sessionId);
     this.playerUserIds.delete(client.sessionId);
     if (this.state.phase === "waiting") {
-      this.setMetadata({ playerCount: this.state.players.size });
+      this.setMetadata({
+        playerCount: this.state.players.size,
+        nicknames: [...this.state.players.values()].map((p) => p.nickname),
+      });
     }
     recordEvent({
       type: "leave",

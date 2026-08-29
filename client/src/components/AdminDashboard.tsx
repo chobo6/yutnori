@@ -1,7 +1,22 @@
 import { useEffect, useState, type FormEvent } from "react";
 import styles from "./AdminDashboard.module.css";
 
-type RoomInfo = { roomId: string; clients: number; maxClients: number; metadata?: { title?: string; phase?: string; playerCount?: number } };
+type RoomInfo = {
+  roomId: string;
+  metadata?: {
+    title?: string;
+    phase?: "waiting" | "playing" | "finished";
+    playerCount?: number;
+    playerCapacity?: number;
+    nicknames?: string[];
+  };
+};
+
+const PHASE_LABEL: Record<string, string> = {
+  waiting: "대기중",
+  playing: "진행중",
+  finished: "종료",
+};
 type AdminEvent = { type: string; timestamp: number; nickname: string; roomId: string; roomTitle: string; ip: string; sessionId: string };
 type ChatLogEntry = { nickname: string; text: string; createdAt: string };
 type DailyVisitStats = { today: number; recent: { date: string; count: number }[] };
@@ -114,7 +129,11 @@ export function AdminDashboard({
         <ul>
           {rooms.map((r) => (
             <li key={r.roomId}>
-              {r.metadata?.title ?? r.roomId} — {r.metadata?.phase} — {r.clients}/{r.maxClients}
+              {r.metadata?.title ?? r.roomId} — {PHASE_LABEL[r.metadata?.phase ?? ""] ?? r.metadata?.phase} —{" "}
+              {r.metadata?.playerCount ?? 0}/{r.metadata?.playerCapacity ?? "?"}
+              {r.metadata?.nicknames && r.metadata.nicknames.length > 0 && (
+                <> ({r.metadata.nicknames.join(", ")})</>
+              )}
             </li>
           ))}
         </ul>

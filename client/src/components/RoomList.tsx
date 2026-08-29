@@ -74,12 +74,12 @@ export function RoomList({
         <h2>방 목록</h2>
         <div className={styles.headerActions}>
           <span className={styles.nickname}>{nickname}님</span>
-          <button type="button" onClick={onOpenInquiry}>
+          <button type="button" className={styles.secondaryButton} onClick={onOpenInquiry}>
             문의하기
           </button>
         </div>
       </div>
-      <button type="button" onClick={() => setShowCreate(true)}>
+      <button type="button" className={styles.primaryButton} onClick={() => setShowCreate(true)}>
         방 만들기
       </button>
       {joinError && <p className={styles.error}>{joinError}</p>}
@@ -97,6 +97,7 @@ export function RoomList({
             </span>
             <button
               type="button"
+              className={styles.primaryButton}
               disabled={disabled || joiningId === r.roomId}
               onClick={() => handleJoin(r.roomId)}
             >
