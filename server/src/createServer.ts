@@ -7,8 +7,8 @@ import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { MatchRoom } from "./rooms/MatchRoom";
 import cookieParser from "cookie-parser";
-import { getOrCreateUser, getUserById, setNickname, verifyGoogleIdToken } from "./auth/googleAuth";
-import { getCookieValue, SESSION_COOKIE_NAME, signSession, verifySession } from "./auth/session";
+import { getOrCreateUser, getUserById, setNickname, touchLastLogin, verifyGoogleIdToken } from "./auth/googleAuth";
+import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_MS, signSession, verifySession } from "./auth/session";
 import { recordUserIp } from "./admin/userIps";
 import { recordVisit } from "./admin/dailyVisits";
 import { recordInquiry } from "./admin/inquiries";
@@ -30,7 +30,7 @@ const clientDistPath = path.join(__dirname, "../public");
 
 export function createGameServer() {
   const app = express();
-  app.set("trust proxy", true);
+  app.set("trust proxy", 1);
   app.use(express.json());
   app.use(cookieParser());
   const httpServer = createHttpServer(app);
@@ -50,7 +50,8 @@ export function createGameServer() {
       return;
     }
     // dev 환경에서는 client(5173)와 server(2567)가 다른 origin이라 CORS 헤더가
-    // 없으면 브라우저가 응답을 못 읽는다. 인증 없는 공개 방 목록이라 와일드카드로 열어도 안전함.
+    // 없으면 브라우저가 응답을 못 읽는다. 이 라우트는 위에서 이미 세션 쿠키 검증을 거치므로
+    // 와일드카드를 열어도 미인증 접근이 뚫리는 건 아니다.
     res.header("Access-Control-Allow-Origin", "*");
     // 관전 기능(2026-08-27~) 도입 이후로는 진행 중인 방도 목록에 보여야(관전하기) 하므로
     // 더 이상 locked:false로 거르지 않는다 — MatchRoom.ts가 metadata.phase로 대기/진행 상태를
@@ -82,7 +83,7 @@ export function createGameServer() {
         httpOnly: true,
         secure: req.secure,
         sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000,
+        maxAge: SESSION_MAX_AGE_MS,
       });
       const ip = req.ip ?? "unknown";
       recordUserIp(user.id, ip);
@@ -103,6 +104,7 @@ export function createGameServer() {
     }
     recordUserIp(user.id, req.ip ?? "unknown");
     recordVisit(user.id);
+    touchLastLogin(user.id);
     res.json(user);
   });
 

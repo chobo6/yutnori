@@ -7,6 +7,7 @@ import { fetchMe, loginWithGoogle, logout, type Profile } from "./game/auth";
 import { GoogleLoginScreen } from "./components/GoogleLoginScreen";
 import { NicknameSetupScreen } from "./components/NicknameSetupScreen";
 import { InquiryModal } from "./components/InquiryModal";
+import { AnnouncementBanner } from "./components/AnnouncementBanner";
 import { RoomList } from "./components/RoomList";
 import { WaitingRoom } from "./components/WaitingRoom";
 import { GameBoard } from "./components/GameBoard";
@@ -25,7 +26,7 @@ function App() {
   useMatchRoom(room);
 
   useEffect(() => {
-    fetchMe().then(setProfile);
+    fetchMe().then(setProfile).catch(() => setProfile(null));
   }, []);
 
   const handleCredential = useCallback(async (credential: string) => {
@@ -71,11 +72,13 @@ function App() {
   if (!room) {
     return (
       <>
+        <AnnouncementBanner />
         <RoomList
           nickname={nickname}
           onRoomJoined={setRoom}
           onLogout={handleLogout}
           onOpenInquiry={() => setShowInquiry(true)}
+          onSessionExpired={() => setProfile(null)}
         />
         {showInquiry && <InquiryModal onClose={() => setShowInquiry(false)} />}
       </>
@@ -95,6 +98,7 @@ function App() {
 
   return (
     <div>
+      <AnnouncementBanner />
       {/* 대기실/플레이/종료 단계와 무관하게 항상 표시 — 참가자/관전자 아바타 + 나가기 버튼. */}
       <ParticipantBar room={room} onLeaveLobby={() => setRoom(null)} />
 

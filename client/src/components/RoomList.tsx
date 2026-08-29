@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Room, RoomAvailable } from "colyseus.js";
 import type { MatchState } from "../game/matchTypes";
-import { joinRoom, listRooms, type RoomMeta } from "../colyseus";
+import { joinRoom, listRooms, UnauthorizedError, type RoomMeta } from "../colyseus";
 import { CreateRoomModal } from "./CreateRoomModal";
 import styles from "./RoomList.module.css";
 
@@ -22,15 +22,18 @@ export function RoomList({
   onRoomJoined,
   onLogout,
   onOpenInquiry,
+  onSessionExpired,
 }: {
   nickname: string;
   onRoomJoined: (room: Room<MatchState>) => void;
   onLogout: () => void;
   onOpenInquiry: () => void;
+  onSessionExpired: () => void;
 }) {
   const [rooms, setRooms] = useState<RoomAvailable<RoomMeta>[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +42,10 @@ export function RoomList({
         const list = await listRooms();
         if (!cancelled) setRooms(list);
       } catch (err) {
+        if (err instanceof UnauthorizedError) {
+          onSessionExpired();
+          return;
+        }
         console.error("방 목록 조회 실패", err);
       }
     }
@@ -48,16 +55,17 @@ export function RoomList({
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [onSessionExpired]);
 
   async function handleJoin(roomId: string) {
     if (joiningId) return;
     setJoiningId(roomId);
+    setJoinError(null);
     try {
       const room = await joinRoom(roomId);
       onRoomJoined(room);
     } catch (err) {
-      console.error("방 입장 실패", err);
+      setJoinError(err instanceof Error ? err.message : "방 입장에 실패했습니다.");
       setJoiningId(null);
     }
   }
@@ -79,6 +87,7 @@ export function RoomList({
       <button type="button" onClick={() => setShowCreate(true)}>
         방 만들기
       </button>
+      {joinError && <p className={styles.error}>{joinError}</p>}
       {rooms.length === 0 && <p>열린 방이 없습니다. 방을 만들어보세요!</p>}
       {rooms.map((r) => {
         const { label, disabled } = joinButtonState(r.metadata);

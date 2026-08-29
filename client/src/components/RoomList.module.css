@@ -31,3 +31,8 @@
   border: 1px solid #d9cba8;
   border-radius: 6px;
 }
+
+.error {
+  color: var(--accent);
+  font-size: 0.85rem;
+}

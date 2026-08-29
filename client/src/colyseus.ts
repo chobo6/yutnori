@@ -28,8 +28,11 @@ export interface RoomMeta {
   playerCapacity: number;
 }
 
+export class UnauthorizedError extends Error {}
+
 export async function listRooms(): Promise<RoomAvailable<RoomMeta>[]> {
   const res = await fetch(`${httpUrl}/api/rooms`, { credentials: "same-origin" });
+  if (res.status === 401) throw new UnauthorizedError("로그인이 필요합니다.");
   if (!res.ok) throw new Error(`방 목록 조회 실패: ${res.status}`);
   return res.json();
 }

@@ -15,16 +15,18 @@ export function CreateRoomModal({
   const [mode, setMode] = useState<"2v2" | "1v1">("2v2");
   const [allowSpectators, setAllowSpectators] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (creating) return;
     setCreating(true);
+    setCreateError(null);
     try {
       const room = await createRoom(title, mode, allowSpectators);
       onCreated(room);
     } catch (err) {
-      console.error("방 생성 실패", err);
+      setCreateError(err instanceof Error ? err.message : "방 생성에 실패했습니다.");
       setCreating(false);
     }
   }
@@ -74,6 +76,8 @@ export function CreateRoomModal({
           />
           <span>관전 허용</span>
         </label>
+
+        {createError && <p className={styles.error}>{createError}</p>}
 
         <div className={styles.actions}>
           <button type="button" className={styles.cancelButton} onClick={onClose}>
