@@ -90,20 +90,20 @@ describe("resolveThrow", () => {
     expect(resolveThrow(0, elapsed, cycleMs, sequence(0.69))).toBe("geol");
   });
 
-  it("윷/모 구간은 확인 확률이 60%다 — 70% 기준이었다면 통과했을 rng(0.65)도 실패로 재판정된다", () => {
-    // 윷(.875~.9375) 구간에 맞았고 rng(0.65)는 60% 임계값 이상이라 실패 -> 재판정.
+  it("윷/모 구간은 확인 확률이 50%다 — 70% 기준이었다면 통과했을 rng(0.65)도 실패로 재판정된다", () => {
+    // 윷(.875~.9375) 구간에 맞았고 rng(0.65)는 50% 임계값 이상이라 실패 -> 재판정.
     // 재판정 rng(0.3)는 개 구간(.25~.625) 안이라 최종 결과는 개.
     const elapsed = 0.9 * (cycleMs / 2);
     expect(resolveThrow(0, elapsed, cycleMs, sequence(0.65, 0.3))).toBe("gae");
   });
 
-  it("윷/모 구간은 rng<0.6이면 확인 성공해 그대로 확정된다(0.6 임계값 경계 확인)", () => {
+  it("윷/모 구간은 rng<0.5이면 확인 성공해 그대로 확정된다(0.5 임계값 경계 확인)", () => {
     const elapsed = 0.9 * (cycleMs / 2); // 윷 구간
-    expect(resolveThrow(0, elapsed, cycleMs, sequence(0.59))).toBe("yut");
+    expect(resolveThrow(0, elapsed, cycleMs, sequence(0.49))).toBe("yut");
   });
 
   it("확인 실패로 재판정된 결과가 다시 도라면 빽도 재판정까지 이어진다", () => {
-    // 모(.9375~1.0) 구간에 맞았지만 확인(0.9>=0.6) 실패 -> 재판정(0.1)은 도 구간(0~.25) 안 ->
+    // 모(.9375~1.0) 구간에 맞았지만 확인(0.9>=0.5) 실패 -> 재판정(0.1)은 도 구간(0~.25) 안 ->
     // 결과가 도이므로 빽도 재판정(세 번째 rng 0.1<0.25)까지 이어져 최종 빽도.
     const elapsed = 0.97 * (cycleMs / 2);
     expect(resolveThrow(0, elapsed, cycleMs, sequence(0.9, 0.1, 0.1))).toBe("backDo");

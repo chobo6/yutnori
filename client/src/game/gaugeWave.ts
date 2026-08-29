@@ -6,7 +6,7 @@
  * 값을 따르며(ARCHITECTURE.md §2 서버 권위형 원칙), 여기 계산값을 서버 판정 대신 신뢰하면 안 된다.
  */
 
-export const DEFAULT_GAUGE_CYCLE_MS = 1000;
+export const DEFAULT_GAUGE_CYCLE_MS = 600;
 
 /** elapsedMs를 cycleMs 주기의 삼각파(0->1->0)로 변환한다. server/src/game/gauge.ts의 wavePosition과 동일. */
 export function wavePosition(elapsedMs: number, cycleMs: number = DEFAULT_GAUGE_CYCLE_MS): number {

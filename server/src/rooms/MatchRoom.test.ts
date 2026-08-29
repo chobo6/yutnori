@@ -7,9 +7,9 @@ const CHARACTERS = ["교주", "성직", "마담", "의사"];
 
 async function setupFourPlayers(colyseus: ColyseusTestServer, options: Record<string, unknown> = {}) {
   // 기본 rng는 항상 0.3으로 고정한다 — 게이지 확인 확률(2026-08-25~)이 도입된 뒤로는 rng가
-  // Math.random이면 타이밍만 정확히 맞춰도 가끔(도/개/걸 30%, 윷/모 40%) 다른 패로 재판정될 수
+  // Math.random이면 타이밍만 정확히 맞춰도 가끔(도/개/걸 30%, 윷/모 50%) 다른 패로 재판정될 수
   // 있어, 아래 *_ELAPSED_MS 상수로 특정 결과를 노리는 테스트들이 아주 드물게 flaky해진다.
-  // 0.3은 모든 확인 확률(60%/70%)보다 작아 재판정이 없고, 빽도 확률(25%)보다는 커서 "도"를
+  // 0.3은 모든 확인 확률(50%/70%)보다 작아 재판정이 없고, 빽도 확률(25%)보다는 커서 "도"를
   // 진짜 "도"로 유지한다(0처럼 너무 작으면 "도"가 항상 "빽도"로 재판정돼, autoThrow가 매번
   // "도" 구간을 때리는 케이스에서 시작점에 있는 말이 영원히 못 움직이는 죽은 상태에 빠진다).
   // 능력 확률까지 특정 값으로 고정해야 하는 테스트는 options로 넘겨 이 기본값을 덮어쓴다.
@@ -42,14 +42,15 @@ function flush(ms = 50) {
 // Global Constraints에 정리된 다섯 값 — 기본 flush()(~50ms)는 결과가 매번 달라지므로, 특정
 // 결과를 확정해야 하는 테스트는 이 값들로 elapsed를 고정한다. 게이지가 왼쪽 "도"에서
 // 시작해 오른쪽 "모"로 차오르도록 순서가 바뀌면서(2026-08-25) 각 값도 새 구간 경계에 맞게
-// 다시 계산됐다 — 아래 모든 테스트가 rng를 안 넘기거나(기본 Math.random) 결과 자체를
-// 검사하지 않는 자리에서만 쓰므로, 확인 확률(70%/60%) 재판정으로 가끔 다른 패가 나와도
+// 다시 계산됐고, 게이지 주기가 600ms로 빨라지면서(2026-08-29) 다시 한 번 재계산됐다 — 아래
+// 모든 테스트가 rng를 안 넘기거나(기본 Math.random) 결과 자체를
+// 검사하지 않는 자리에서만 쓰므로, 확인 확률(70%/50%) 재판정으로 가끔 다른 패가 나와도
 // 문제 없는 곳에서만 사용한다(구체적 결과를 검사하는 자리는 room.rng를 함께 고정해서 쓴다).
-const DO_ELAPSED_MS = 50;
-const GAE_ELAPSED_MS = 200;
-const GEOL_ELAPSED_MS = 375;
-const YUT_ELAPSED_MS = 450;
-const MO_ELAPSED_MS = 485;
+const DO_ELAPSED_MS = 30;
+const GAE_ELAPSED_MS = 120;
+const GEOL_ELAPSED_MS = 225;
+const YUT_ELAPSED_MS = 270;
+const MO_ELAPSED_MS = 291;
 
 describe("MatchRoom", () => {
   let colyseus: ColyseusTestServer;
@@ -784,7 +785,8 @@ describe("MatchRoom", () => {
 
     it("게임이 끝나면 metadata.phase가 finished로 바뀐다", async () => {
       // setupFourPlayers의 기본 rng(0.3)는 "도"(1칸) 구간을 확인 성공/빽도 없이 그대로
-      // 확정시킨다(DO_ELAPSED_MS=50과 동일한 기본 flush(50)) — 체인 없이 매번 정확히 1칸.
+      // 확정시킨다(기본 flush(50)도 여전히 "도" 구간 안이라 DO_ELAPSED_MS(30)와 결과가 같다)
+      // — 체인 없이 매번 정확히 1칸.
       const { room, clients } = await setupFourPlayers(colyseus);
       const winnerSessionId = room.state.turnOrder[room.state.currentTurnIndex];
       const winnerClient = clients.find((c) => c.sessionId === winnerSessionId)!;

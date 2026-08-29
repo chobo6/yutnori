@@ -41,7 +41,7 @@ describe("MatchRoom 지름길 통합", () => {
   afterEach(async () => await colyseus.cleanup());
 
   it("모서리에서 지름길을 타면 서버 상태가 shortcutOut으로 정확히 인코딩되고 previousPosition도 올바르게 남는다", async () => {
-    // rng:()=>0 — "모" 확인 확률(60%)이 항상 성공하도록 고정한다(2026-08-25, 게이지 확인/재판정
+    // rng:()=>0 — "모" 확인 확률(50%)이 항상 성공하도록 고정한다(2026-08-25, 게이지 확인/재판정
     // 도입). myPiece는 혼자 이동해 업기 그룹이 비어있으므로 교주 보너스는 발동하지 않는다.
     const { room, clients } = await setupFourPlayers(colyseus, { rng: () => 0 });
     const currentSessionId = room.state.turnOrder[room.state.currentTurnIndex];
@@ -54,11 +54,11 @@ describe("MatchRoom 지름길 통합", () => {
     myPiece.previousPositionIndex = 9;
 
     turnClient.send("throwStart", {});
-    await flush(485); // "모"(5칸) 결과를 안정적으로 노리는 기존 관례(다른 테스트 파일들과 동일한 타이밍)
+    await flush(291); // "모"(5칸) 결과를 안정적으로 노리는 기존 관례(다른 테스트 파일들과 동일한 타이밍)
     turnClient.send("throwRelease", {});
     await flush();
     turnClient.send("throwStart", {});
-    await flush(200); // "개" 구간 — 윷/모가 아니므로 체인이 끝나고 이동 가능(resolved)해진다
+    await flush(120); // "개" 구간 — 윷/모가 아니므로 체인이 끝나고 이동 가능(resolved)해진다
     turnClient.send("throwRelease", {});
     await flush();
     turnClient.send("movePiece", { pieceId: myPiece.id, useShortcut: true, resultId: room.state.pendingResults[0].id });

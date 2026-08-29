@@ -17,7 +17,7 @@ export const YUT_STEPS: Record<string, number> = {
 
 export const GRANTS_EXTRA_THROW: ReadonlySet<YutResult> = new Set(["yut", "mo"]);
 
-export const DEFAULT_GAUGE_CYCLE_MS = 1000;
+export const DEFAULT_GAUGE_CYCLE_MS = 600;
 
 /** [0, 1) 범위의 난수를 반환하는 함수. 테스트에서 결정적 값을 주입하기 위한 타입 — abilities.ts의 Rng와 동일한 모양. */
 export type Rng = () => number;
@@ -44,17 +44,18 @@ const ZONES: Array<{ upperBound: number; result: YutResult }> = [
 const BACK_DO_CHANCE = 0.25;
 
 /**
- * 게이지를 정확히 맞춰도 그 구간이 무조건 확정되지 않는다(2026-08-25 변경, 사용자 요청) — 도/개/걸은
- * 70%, 윷/모는 30% 더 낮은 60%로 확정되고, 나머지 확률로는 실패해서 각 패가 뜰 확률(=위 ZONES의
- * 폭 비중)에 맞는 완전히 새로운 재판정으로 넘어간다. 타이밍을 정확히 맞추는 의미는 남아있지만
- * (특히 희귀한 윷/모는 실패 확률이 더 높다), 절대적인 확정이 아니게 됐다.
+ * 게이지를 정확히 맞춰도 그 구간이 무조건 확정되지 않는다(2026-08-25 도입, 2026-08-29 윷/모
+ * 확률 60%→50%로 추가 하향, 둘 다 사용자 요청) — 도/개/걸은 70%, 윷/모는 50%로만 확정되고,
+ * 나머지 확률로는 실패해서 각 패가 뜰 확률(=위 ZONES의 폭 비중)에 맞는 완전히 새로운
+ * 재판정으로 넘어간다. 타이밍을 정확히 맞추는 의미는 남아있지만(특히 희귀한 윷/모는 절반은
+ * 그대로 인정되고 절반은 재판정된다), 절대적인 확정이 아니게 됐다.
  */
 const CONFIRM_CHANCE: Record<YutResult, number> = {
   do: 0.7,
   gae: 0.7,
   geol: 0.7,
-  yut: 0.6,
-  mo: 0.6,
+  yut: 0.5,
+  mo: 0.5,
 };
 
 /** 위 ZONES의 폭 비중 그대로 새 난수 하나로 결과를 뽑는다 — 확인 확률 실패 시 재판정에 쓴다. */
