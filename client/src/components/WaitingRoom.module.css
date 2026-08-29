@@ -1,8 +1,299 @@
 .wrap {
-  padding: 1rem;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem 3rem;
 }
 
-.selected {
-  outline: 2px solid #2f6feb;
-  font-weight: bold;
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: #fffdf7;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 24px 28px 28px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+  border-bottom: 3px solid transparent;
+  border-image: var(--dancheong-band) 1;
+}
+
+.header h2 {
+  margin: 0;
+}
+
+.modeBadge {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 12px;
+  text-transform: uppercase;
+}
+
+.section {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.section:first-of-type {
+  border-top: none;
+  padding-top: 12px;
+}
+
+.sectionTitle {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.75;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.participantCount {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* --- 팀 선택: 전통 홍팀/청팀 배색을 그대로 가져온다(A=--accent 빨강, B=--accent-blue 남색,
+   둘 다 index.css의 dancheong-band에 이미 쓰이는 색) --- */
+.teamRow {
+  display: flex;
+  gap: 10px;
+}
+
+.teamButton {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  color: inherit;
+  background: #fff;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.teamA {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.teamA.teamSelected {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.teamB {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue-border);
+}
+
+.teamB.teamSelected {
+  background: var(--accent-blue);
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+
+/* --- 캐릭터 선택(2v2): 토글 칩 --- */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 7px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.chipSelected {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* --- 캐릭터 선택(1v1): 말 4개 슬롯 --- */
+.slotGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.slotLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.slotSelect {
+  padding: 7px 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-h);
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+}
+
+/* --- 참가자 목록 --- */
+.notice {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.playerList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.playerRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.playerRow:last-child {
+  border-bottom: none;
+}
+
+.playerName {
+  font-weight: 700;
+  color: var(--text-h);
+  min-width: 64px;
+}
+
+.teamTag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+
+.teamTagA {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.teamTagB {
+  background: var(--accent-blue-bg);
+  color: var(--accent-blue);
+}
+
+.teamTagNone {
+  background: var(--code-bg);
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.playerCharacters {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readyTag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.readyTagDone {
+  color: var(--success);
+  opacity: 1;
+}
+
+/* --- 준비 완료 버튼: 화면의 최종 행동이라 항상 카드 맨 아래, 눈에 띄게 --- */
+.readyButton {
+  margin-top: 18px;
+  padding: 13px 0;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.readyButton:hover {
+  background: #832324;
+}
+
+.readyButtonActive {
+  background: var(--success);
+}
+
+.readyButtonActive:hover {
+  background: #164a3c;
+}
+
+@media (max-width: 420px) {
+  .slotGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .playerName {
+    min-width: 0;
+    flex-basis: 100%;
+  }
 }

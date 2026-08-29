@@ -7,6 +7,13 @@
   --accent: #9e2a2b;
   --accent-bg: rgba(158, 42, 43, 0.1);
   --accent-border: rgba(158, 42, 43, 0.5);
+  /* 청팀(B팀) 강조색 — 아래 dancheong-band에 이미 쓰이는 남색을 그대로 재사용한다(전통 한국
+     놀이의 홍팀/청팀 배색 관례에 맞춰 A팀=--accent 빨강, B팀=이 남색으로 구분한다). */
+  --accent-blue: #1d3461;
+  --accent-blue-bg: rgba(29, 52, 97, 0.1);
+  --accent-blue-border: rgba(29, 52, 97, 0.5);
+  --success: #1d5c4a;
+  --success-bg: rgba(29, 92, 74, 0.1);
   --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(120, 90, 40, 0.1) 0 10px 15px -3px, rgba(120, 90, 40, 0.05) 0 4px 6px -2px;

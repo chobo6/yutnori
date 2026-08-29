@@ -81,90 +81,118 @@ export function WaitingRoom({ room }: { room: Room<MatchState> }) {
 
   return (
     <div className={styles.wrap}>
-      <h2>대기실</h2>
+      <div className={styles.card}>
+        <header className={styles.header}>
+          <h2>대기실</h2>
+          <span className={styles.modeBadge}>{mode}</span>
+        </header>
 
-      <section>
-        <h3>팀 선택</h3>
-        <button
-          type="button"
-          className={me?.team === "A" ? styles.selected : undefined}
-          onClick={() => pickTeam("A")}
-        >
-          A팀
-        </button>
-        <button
-          type="button"
-          className={me?.team === "B" ? styles.selected : undefined}
-          onClick={() => pickTeam("B")}
-        >
-          B팀
-        </button>
-      </section>
-
-      {mode === "2v2" ? (
-        <section>
-          <h3>캐릭터 선택 (2종)</h3>
-          {CHARACTERS.map((character) => (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>팀 선택</h3>
+          <div className={styles.teamRow}>
             <button
-              key={character}
               type="button"
-              className={pendingCharacters.includes(character) ? styles.selected : undefined}
-              onClick={() => toggleCharacter(character)}
+              className={`${styles.teamButton} ${styles.teamA} ${me?.team === "A" ? styles.teamSelected : ""}`}
+              onClick={() => pickTeam("A")}
             >
-              {character}
+              A팀
             </button>
-          ))}
+            <button
+              type="button"
+              className={`${styles.teamButton} ${styles.teamB} ${me?.team === "B" ? styles.teamSelected : ""}`}
+              onClick={() => pickTeam("B")}
+            >
+              B팀
+            </button>
+          </div>
         </section>
-      ) : (
-        <section>
-          <h3>캐릭터 선택 (말 4개, 중복 가능)</h3>
-          {slotCharacters.map((character, index) => (
-            <label key={index}>
-              말 {index + 1}:{" "}
-              <select value={character} onChange={(e) => updateSlot(index, e.target.value as CharacterId)}>
-                {CHARACTERS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-        </section>
-      )}
 
-      <section>
-        <button type="button" onClick={toggleReady}>
-          {me?.ready ? "준비 취소" : "준비 완료"}
+        {mode === "2v2" ? (
+          <section className={styles.section}>
+            <h3 className={styles.sectionTitle}>캐릭터 선택 (2종)</h3>
+            <div className={styles.chipRow}>
+              {CHARACTERS.map((character) => (
+                <button
+                  key={character}
+                  type="button"
+                  className={`${styles.chip} ${pendingCharacters.includes(character) ? styles.chipSelected : ""}`}
+                  onClick={() => toggleCharacter(character)}
+                >
+                  {character}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className={styles.section}>
+            <h3 className={styles.sectionTitle}>캐릭터 선택 (말 4개, 중복 가능)</h3>
+            <div className={styles.slotGrid}>
+              {slotCharacters.map((character, index) => (
+                <label key={index} className={styles.slot}>
+                  <span className={styles.slotLabel}>말 {index + 1}</span>
+                  <select
+                    className={styles.slotSelect}
+                    value={character}
+                    onChange={(e) => updateSlot(index, e.target.value as CharacterId)}
+                  >
+                    {CHARACTERS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>
+            참가자 <span className={styles.participantCount}>{players.length}/{totalRequired}</span>
+          </h3>
+          {players.length === totalRequired && !teamSplitOk && (
+            <p className={styles.notice}>
+              A팀 {requiredPerTeam}명 / B팀 {requiredPerTeam}명이 되어야 게임이 시작됩니다 (현재 A팀 {teamACount}명,
+              B팀 {teamBCount}명)
+            </p>
+          )}
+          {players.length === totalRequired && teamSplitOk && charactersMissing > 0 && (
+            <p className={styles.notice}>
+              모두 캐릭터를 {mode === "1v1" ? `${requiredCharacters}개` : `${requiredCharacters}종`} 골라야 게임이
+              시작됩니다 (아직 {charactersMissing}명 미완료)
+            </p>
+          )}
+          <ul className={styles.playerList}>
+            {players.map((player) => (
+              <li key={player.sessionId} className={styles.playerRow}>
+                <span className={styles.playerName}>{playerLabel(player.sessionId, room)}</span>
+                <span
+                  className={`${styles.teamTag} ${
+                    player.team === "A" ? styles.teamTagA : player.team === "B" ? styles.teamTagB : styles.teamTagNone
+                  }`}
+                >
+                  {player.team || "미정"}
+                </span>
+                <span className={styles.playerCharacters}>
+                  {player.characters.length > 0 ? player.characters.join(", ") : "캐릭터 미정"}
+                </span>
+                <span className={`${styles.readyTag} ${player.ready ? styles.readyTagDone : ""}`}>
+                  {player.ready ? "✓ 준비 완료" : "대기중"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <button
+          type="button"
+          className={`${styles.readyButton} ${me?.ready ? styles.readyButtonActive : ""}`}
+          onClick={toggleReady}
+        >
+          {me?.ready ? "✓ 준비 완료 (취소하려면 클릭)" : "준비 완료"}
         </button>
-      </section>
-
-      <section>
-        <h3>
-          참가자 ({players.length}/{totalRequired})
-        </h3>
-        {players.length === totalRequired && !teamSplitOk && (
-          <p>
-            A팀 {requiredPerTeam}명 / B팀 {requiredPerTeam}명이 되어야 게임이 시작됩니다 (현재 A팀 {teamACount}명,
-            B팀 {teamBCount}명)
-          </p>
-        )}
-        {players.length === totalRequired && teamSplitOk && charactersMissing > 0 && (
-          <p>
-            모두 캐릭터를 {mode === "1v1" ? `${requiredCharacters}개` : `${requiredCharacters}종`} 골라야 게임이
-            시작됩니다 (아직 {charactersMissing}명 미완료)
-          </p>
-        )}
-        <ul>
-          {players.map((player) => (
-            <li key={player.sessionId}>
-              {playerLabel(player.sessionId, room)} — 팀: {player.team || "미정"}, 캐릭터:{" "}
-              {player.characters.length > 0 ? player.characters.join(", ") : "미정"}, 준비:{" "}
-              {player.ready ? "완료" : "대기중"}
-            </li>
-          ))}
-        </ul>
-      </section>
+      </div>
     </div>
   );
 }
