@@ -1,5 +1,14 @@
 .wrap {
+  /* #root(index.css)가 display:flex인 flex 컨테이너라, 이 div는 flex 아이템이다. margin:0
+     auto로 가운데 정렬하는 블록 요소처럼 보이지만, flex 아이템의 cross-axis(가로) 마진이
+     auto면 stretch가 아니라 "내용물 크기 그대로 두고 남는 공간으로 가운데 정렬"하는 방식으로
+     계산된다 — 그래서 width를 명시하지 않으면 폭이 넓은 표(.tableScroll 안의 .table,
+     white-space:nowrap)가 있을 때 이 요소가 뷰포트보다 넓게 렌더링되고, 표 자체 스크롤 대신
+     페이지 전체가 가로로 밀리는 문제가 생긴다. width:100%를 명시해야 실제로 뷰포트(정확히는
+     #root) 폭까지 줄어들고, 그 안의 .tableScroll이 자체적으로 가로 스크롤을 담당한다. */
+  width: 100%;
   max-width: 900px;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 32px 20px 60px;
   text-align: left;
@@ -16,6 +25,7 @@
 
 .nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 24px;
 }
@@ -163,6 +173,7 @@
 
 .tableScroll {
   max-height: 320px;
+  overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -198,4 +209,29 @@
   background: var(--code-bg);
   font-family: inherit;
   color: var(--text-h);
+}
+
+/* 좁은 화면(모바일)에서 좌우 여백/제목 크기를 줄여 실제 콘텐츠 폭을 넓힌다 — 표는 이미
+   .tableScroll(overflow-x: auto)가 자체적으로 가로 스크롤을 처리하므로 여기서 손댈 필요 없다.
+   프로젝트 전반의 모바일 분기점(600px, App.module.css)과 통일. */
+@media (max-width: 600px) {
+  .wrap {
+    padding: 20px 12px 40px;
+  }
+
+  .wrap h1 {
+    font-size: 22px;
+  }
+
+  .section {
+    padding: 14px 16px;
+  }
+
+  .section form {
+    flex-wrap: wrap;
+  }
+
+  .section button[type="submit"] {
+    flex: 1 1 auto;
+  }
 }

@@ -1,5 +1,13 @@
 .wrap {
+  /* #root가 flex 컨테이너라 이 div는 flex 아이템이다 — margin:0 auto로 가운데 정렬하는
+     블록처럼 보이지만, flex cross-axis 마진이 auto면 stretch 대신 "내용물 크기 그대로 남는
+     공간으로 가운데 정렬"하는 방식으로 계산돼, width를 명시하지 않으면 폭이 넓은 표
+     (.tableScroll 안의 .table, 각 셀 white-space:nowrap)가 있을 때 뷰포트보다 커져서 표
+     스크롤 대신 페이지 전체가 가로로 밀린다. width:100%를 명시해야 실제로 줄어들고
+     .tableScroll이 가로 스크롤을 담당한다(AdminDashboard.module.css와 동일한 관례). */
+  width: 100%;
   max-width: 1000px;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 32px 20px 60px;
   text-align: left;
@@ -31,14 +39,20 @@
   padding-bottom: 10px;
 }
 
+/* 화면이 좁아(모바일) 표 전체 폭이 뷰포트를 넘어가도, 페이지 전체가 가로 스크롤되는 대신
+   이 컨테이너 안에서만 가로 스크롤되게 한다 — 둥근 모서리/그림자를 표 대신 여기로 옮겼다
+   (AdminDashboard.module.css의 .tableScroll과 동일한 패턴). */
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
   background: #fffdf7;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: var(--shadow);
 }
 
 .table th,
@@ -47,6 +61,7 @@
   text-align: left;
   font-size: 13.5px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .table th {
@@ -182,4 +197,21 @@
 .modal button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* 좁은 화면(모바일)에서 좌우 여백/제목 크기를 줄인다 — 표 자체는 .tableScroll이 가로
+   스크롤을 전담하므로 여기서 칸 너비를 억지로 줄이지 않는다. 프로젝트 전반의 모바일
+   분기점(600px, App.module.css)과 통일. */
+@media (max-width: 600px) {
+  .wrap {
+    padding: 20px 12px 40px;
+  }
+
+  .wrap h1 {
+    font-size: 22px;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+  }
 }

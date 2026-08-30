@@ -1,5 +1,10 @@
 .wrap {
+  /* #root가 flex 컨테이너라 이 div는 flex 아이템이다 — width:100%를 명시해야 margin:0
+     auto의 가운데 정렬과 무관하게 좁은 화면에서 실제로 뷰포트 폭까지 줄어든다
+     (AdminDashboard.module.css와 동일한 관례). */
+  width: 100%;
   max-width: 700px;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 32px 20px 60px;
   text-align: left;
@@ -58,4 +63,14 @@
   margin-top: 8px;
   color: var(--text);
   white-space: pre-wrap;
+}
+
+@media (max-width: 600px) {
+  .wrap {
+    padding: 20px 12px 40px;
+  }
+
+  .wrap h1 {
+    font-size: 22px;
+  }
 }

@@ -83,44 +83,46 @@ export function AdminUsers({ onUnauthorized, onBack }: { onUnauthorized: () => v
         ← 대시보드
       </button>
       <h1>유저 관리 ({total}명)</h1>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>닉네임</th>
-            <th>이름</th>
-            <th>이메일</th>
-            <th>가입일</th>
-            <th>최근 로그인</th>
-            <th>상태</th>
-            <th>액션</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((u) => (
-            <tr key={u.id}>
-              <td>{u.id}</td>
-              <td>{u.nickname ?? "(미설정)"}</td>
-              <td>{u.name ?? "-"}</td>
-              <td>{u.email ?? "-"}</td>
-              <td>{u.createdAt}</td>
-              <td>{u.lastLoginAt ?? "-"}</td>
-              <td>
-                <span className={`${styles.pill} ${u.bannedAt ? styles.pillBanned : styles.pillOk}`}>
-                  {u.bannedAt ? "밴됨" : "정상"}
-                </span>
-              </td>
-              <td>
-                <div className={styles.actions}>
-                  <button onClick={() => setEditing({ id: u.id, nickname: u.nickname })}>닉네임 수정</button>
-                  <button onClick={() => handleBanToggle(u.id, !u.bannedAt)}>{u.bannedAt ? "밴 해제" : "밴"}</button>
-                  <button onClick={() => handleShowIps(u.id)}>IP 이력</button>
-                </div>
-              </td>
+      <div className={styles.tableScroll}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>닉네임</th>
+              <th>이름</th>
+              <th>이메일</th>
+              <th>가입일</th>
+              <th>최근 로그인</th>
+              <th>상태</th>
+              <th>액션</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((u) => (
+              <tr key={u.id}>
+                <td>{u.id}</td>
+                <td>{u.nickname ?? "(미설정)"}</td>
+                <td>{u.name ?? "-"}</td>
+                <td>{u.email ?? "-"}</td>
+                <td>{u.createdAt}</td>
+                <td>{u.lastLoginAt ?? "-"}</td>
+                <td>
+                  <span className={`${styles.pill} ${u.bannedAt ? styles.pillBanned : styles.pillOk}`}>
+                    {u.bannedAt ? "밴됨" : "정상"}
+                  </span>
+                </td>
+                <td>
+                  <div className={styles.actions}>
+                    <button onClick={() => setEditing({ id: u.id, nickname: u.nickname })}>닉네임 수정</button>
+                    <button onClick={() => handleBanToggle(u.id, !u.bannedAt)}>{u.bannedAt ? "밴 해제" : "밴"}</button>
+                    <button onClick={() => handleShowIps(u.id)}>IP 이력</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div className={styles.pagination}>
         <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
           이전
