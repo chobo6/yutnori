@@ -22,6 +22,7 @@ import { getIpsForUser } from "./admin/userIps";
 import { getInquiries } from "./admin/inquiries";
 import { broadcast, subscribe } from "./admin/announcements";
 import { getOnlineNicknames, touch as touchPresence } from "./admin/presence";
+import { containsEmoji } from "./game/nickname";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** 프로덕션 Docker 이미지에서 client의 빌드 결과(client/dist)를 여기로 복사해 넣는다(Dockerfile
@@ -123,6 +124,10 @@ export function createGameServer() {
       res.status(400).json({ error: "닉네임을 입력해주세요." });
       return;
     }
+    if (containsEmoji(nickname)) {
+      res.status(400).json({ error: "닉네임에 이모티콘은 사용할 수 없습니다." });
+      return;
+    }
     const result = setNickname(userId, nickname);
     if (result === "taken") {
       res.status(409).json({ error: "이미 사용 중인 닉네임입니다." });
@@ -220,6 +225,10 @@ export function createGameServer() {
     const nickname = (req.body as { nickname?: unknown } | undefined)?.nickname;
     if (typeof nickname !== "string" || !nickname.trim()) {
       res.status(400).json({ error: "닉네임을 입력해주세요." });
+      return;
+    }
+    if (containsEmoji(nickname)) {
+      res.status(400).json({ error: "닉네임에 이모티콘은 사용할 수 없습니다." });
       return;
     }
     const result = adminSetNickname(userId, nickname);

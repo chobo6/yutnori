@@ -17,9 +17,11 @@ export function CreateRoomModal({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const trimmedTitle = title.trim();
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (creating) return;
+    if (creating || !trimmedTitle) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -43,7 +45,8 @@ export function CreateRoomModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={20}
-            placeholder="이름 없는 방"
+            placeholder="방 제목을 입력하세요"
+            required
             autoFocus
           />
         </label>
@@ -83,7 +86,7 @@ export function CreateRoomModal({
           <button type="button" className={styles.cancelButton} onClick={onClose}>
             취소
           </button>
-          <button type="submit" className={styles.submitButton} disabled={creating}>
+          <button type="submit" className={styles.submitButton} disabled={creating || !trimmedTitle}>
             {creating ? "만드는 중..." : "만들기"}
           </button>
         </div>

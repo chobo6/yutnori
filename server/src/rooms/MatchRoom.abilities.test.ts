@@ -40,7 +40,7 @@ async function setupTeams(
   characterPicks: [string, string][],
   roomOptions: Record<string, unknown> = {},
 ) {
-  const room = await colyseus.createRoom<MatchState>("match", roomOptions);
+  const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방", ...roomOptions });
   setupTeamsCallSeq += 1;
   const callId = setupTeamsCallSeq;
   const clients = await Promise.all([
@@ -772,7 +772,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     // 번째 이동에 쓸 말(의사)이 교주와 전혀 업혀있지 않은 완전히 별개의 말이어야, 그 이동
     // 자체가 새로운 교주 보너스를 또 만들어내는 혼선 없이 "먼저 쓰지 않은 보너스가 사라지는지"만
     // 순수하게 검증할 수 있다.
-    const room = await colyseus.createRoom<MatchState>("match", { rng: () => 0, moveTimeoutMs: 5000, mode: "1v1" });
+    const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방", rng: () => 0, moveTimeoutMs: 5000, mode: "1v1" });
     const clientA = await connectAsUser(colyseus, room, "교주보너스순서A");
     const clientB = await connectAsUser(colyseus, room, "교주보너스순서B");
     clientA.send("pickTeam", { team: "A" });

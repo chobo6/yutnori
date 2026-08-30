@@ -32,7 +32,7 @@ describe("MatchRoom 전체 매치 흐름", () => {
   it(
     "한 플레이어의 말 2개가 모두 완주할 때까지 반복해서 던지고 이동하면 그 팀이 승리한다",
     async () => {
-      const room = await colyseus.createRoom<MatchState>("match", {});
+      const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방" });
       const clients = await Promise.all([
         connectAsUser(colyseus, room, "풀게임-0"),
         connectAsUser(colyseus, room, "풀게임-1"),

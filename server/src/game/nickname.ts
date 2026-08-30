@@ -9,3 +9,12 @@ export function sanitizeNickname(input: unknown): string {
   if (typeof input !== "string") return "";
   return input.trim().slice(0, MAX_NICKNAME_LENGTH);
 }
+
+// \p{Extended_Pictographic}는 이모지로 쓰이는 대부분의 코드포인트(그림 문자)를 잡아낸다 —
+// 숫자/문자에 결합하는 변형 선택자(️ 등)만으로는 걸리지 않지만, 실제 이모지 글자 자체는
+// 항상 이 카테고리에 속하므로 닉네임의 "이모티콘 금지" 요구사항에는 충분하다.
+const EMOJI_PATTERN = /\p{Extended_Pictographic}/u;
+
+export function containsEmoji(input: string): boolean {
+  return EMOJI_PATTERN.test(input);
+}

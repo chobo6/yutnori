@@ -17,7 +17,7 @@ function flush(ms = 50) {
 let setupFourPlayersCallSeq = 0;
 
 async function setupFourPlayers(colyseus: ColyseusTestServer, roomOptions: Record<string, unknown> = {}) {
-  const room = await colyseus.createRoom<MatchState>("match", roomOptions);
+  const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방", ...roomOptions });
   setupFourPlayersCallSeq += 1;
   const callId = setupFourPlayersCallSeq;
   const clients = await Promise.all([

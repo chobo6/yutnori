@@ -91,7 +91,12 @@ export class MatchRoom extends Room<MatchState> {
     // 있게 넉넉히 열어둔다 — onJoin이 방 단계(phase)로 플레이어/관전자를 직접 가른다.
     this.maxClients = MAX_CLIENTS_WITH_SPECTATORS;
 
-    const title = sanitizeRoomTitle(options?.title) || "이름 없는 방";
+    // 방 제목은 최소 한 글자 이상이어야 생성할 수 있다(2026-08-30 확정) — 공백뿐이거나
+    // 아예 안 주면 방 생성 자체를 거부한다(더 이상 "이름 없는 방"으로 대신 채워주지 않음).
+    const title = sanitizeRoomTitle(options?.title);
+    if (!title) {
+      throw new Error("방 제목을 입력해주세요.");
+    }
     this.roomTitle = title;
     // matchMaker가 onCreate의 반환(Promise)을 기다려주므로, 방 생성 직후 바로
     // getAvailableRooms()/테스트에서 메타데이터를 조회해도 항상 최신 값이 보이도록 await한다.
