@@ -660,6 +660,84 @@ describe("MatchRoom", () => {
     expect(room.state.pendingResults.length).toBe(2); // "윷" + 방금 던진 "도"
   });
 
+  it("윷으로 상대 말을 잡아도 잡기 보너스는 추가로 주지 않는다(윷 자체의 추가 던지기만 받음, 2026-08-30)", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+    const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+    const currentTeam = room.state.players.get(currentTurnSessionId)!.team;
+    const enemyPiece = room.state.pieces.find(
+      (p) => room.state.players.get(p.ownerSessionId)!.team !== currentTeam,
+    )!;
+    // 윷(4칸)으로 이동한 말이 도착하는 칸에 상대 말을 미리 놓아둔다.
+    myPieces[0].positionKind = "outer";
+    myPieces[0].positionIndex = 2;
+    enemyPiece.positionKind = "outer";
+    enemyPiece.positionIndex = 6; // 2 + 4(윷)
+
+    // 1번째 던지기: 윷 — 윷 자체의 추가 던지기 1회를 즉시 사용, 남은 패("윷")를 쌓아둔 채 재던지기
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("idle");
+    expect(room.state.pendingResults.length).toBe(1);
+
+    // 2번째 던지기: 개(2칸) — 이동 단계로 전환. 아직 "윷"(잡기용)과 "개" 둘 다 대기 중.
+    turnClient.send("throwStart", {});
+    await flush(GAE_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("resolved");
+    const yutPending = room.state.pendingResults.find((p) => p.result === "yut")!;
+
+    // "윷"으로 이동해 상대 말을 잡는다 — 윷 자체 보너스는 이미 위에서 다 썼으므로, 이 캡처가
+    // 추가로 또 던지기를 주면 안 된다. 남은 "개" 패가 그대로 있으므로 gaugePhase는 여전히
+    // "resolved"(이동 선택 대기)여야지 "idle"(재던지기 대기)이면 안 된다.
+    turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId: yutPending.id });
+    await flush();
+
+    expect(room.state.pieces.find((p) => p.id === enemyPiece.id)!.positionKind).toBe("start"); // 잡히긴 함
+    expect(room.state.gaugePhase).toBe("resolved"); // 잡기 보너스로 인한 재던지기(idle)가 아님
+    expect(room.state.pendingResults.length).toBe(1); // "개"만 남음, 새로 쌓인 보너스 없음
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(currentTurnSessionId); // 턴은 아직 안 넘어감(개가 남아서)
+  });
+
+  it("모로 상대 말을 잡아도 잡기 보너스는 추가로 주지 않는다(2026-08-30)", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
+    const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
+    const currentTeam = room.state.players.get(currentTurnSessionId)!.team;
+    const enemyPiece = room.state.pieces.find(
+      (p) => room.state.players.get(p.ownerSessionId)!.team !== currentTeam,
+    )!;
+    myPieces[0].positionKind = "outer";
+    myPieces[0].positionIndex = 2;
+    enemyPiece.positionKind = "outer";
+    enemyPiece.positionIndex = 7; // 2 + 5(모)
+
+    turnClient.send("throwStart", {});
+    await flush(MO_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.gaugePhase).toBe("idle");
+
+    turnClient.send("throwStart", {});
+    await flush(GAE_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    const moPending = room.state.pendingResults.find((p) => p.result === "mo")!;
+
+    turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId: moPending.id });
+    await flush();
+
+    expect(room.state.pieces.find((p) => p.id === enemyPiece.id)!.positionKind).toBe("start");
+    expect(room.state.gaugePhase).toBe("resolved"); // 모 자체 보너스는 이미 썼고, 잡기로 또 받지 않는다
+    expect(room.state.pendingResults.length).toBe(1); // "개"만 남음
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(currentTurnSessionId);
+  });
+
   it("sendChat을 보내면 모든 클라이언트가 chatMessage 브로드캐스트를 받는다", async () => {
     const room = await colyseus.createRoom<MatchState>("match", {});
     const clientA = await connectAsUser(colyseus, room, "채팅A");

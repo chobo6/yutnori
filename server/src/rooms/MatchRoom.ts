@@ -722,7 +722,16 @@ export class MatchRoom extends Room<MatchState> {
       return;
     }
 
-    if (hasEffectiveCapture(mainCaptureRecords, negatedPieceIds) && this.extraThrowsGranted < MAX_EXTRA_THROWS) {
+    // 윷/모는 그 자체로 이미 추가 던지기를 받으므로(GRANTS_EXTRA_THROW), 그 윷/모 이동으로
+    // 상대 말까지 잡았다고 해서 잡기 보너스까지 또 얹어주지 않는다(2026-08-30 확정) — 교주
+    // 보너스 전진에서 발생한 잡기(bonusCaptureRecords)는 원래 이동의 결과와 무관한 별개의
+    // 사건이라 이 예외에서 제외한다.
+    if (
+      hasEffectiveCapture(mainCaptureRecords, negatedPieceIds) &&
+      result !== "yut" &&
+      result !== "mo" &&
+      this.extraThrowsGranted < MAX_EXTRA_THROWS
+    ) {
       this.extraThrowsGranted++;
       this.throwsOwed++;
     }

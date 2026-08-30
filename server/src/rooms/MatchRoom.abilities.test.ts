@@ -440,7 +440,10 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     const uisaId = `${clients[2].sessionId}-0`;
     const seongjikId = `${clients[2].sessionId}-1`;
 
-    placeAt(room, moverId, 3);
+    // 잡는 이동 자체는 "개"(윷/모가 아닌 결과)로 해야 한다 — 윷/모로 잡으면 그 자체로 이미
+    // 받은 윷/모 추가 던지기와 별개로 잡기 보너스까지 겹쳐 주지 않기로 했으므로(2026-08-30),
+    // "잡으면 보너스 던지기를 준다"는 이 테스트의 핵심 전제를 윷/모가 가려버리면 안 된다.
+    placeAt(room, moverId, 6); // 6 + 2("개") = 8, victim과 같은 칸
     placeAt(room, victimId, 8);
     placeAt(room, uisaId, 7); // 같은 줄(B) — 의사는 발동 시도하지만 실패
     placeAt(room, seongjikId, 12); // 다른 줄(C)이어도 성직은 제한 없음
@@ -453,7 +456,8 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     await flush(120); // "개" 구간 — 윷/모가 아니므로 여기서 체인이 끝나고 이동 가능(resolved)해진다
     moverClient.send("throwRelease", {});
     await flush();
-    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // 첫 번째로 쌓인 "모" 패로 잡기
+    const gaePending = room.state.pendingResults.find((p) => p.result === "gae")!;
+    moverClient.send("movePiece", { pieceId: moverId, resultId: gaePending.id }); // "개"로 잡기
     await flush();
 
     const victim = room.state.pieces.find((p) => p.id === victimId)!;
