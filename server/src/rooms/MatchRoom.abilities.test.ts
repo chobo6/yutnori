@@ -358,6 +358,49 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(victim.positionIndex).toBe(9); // 의사가 구조 — start로 보내지지 않고 원위치에 남는다
   });
 
+  it("업기로 겹쳐 있던 상대 말 2개를 한꺼번에 잡으면, 의사가 구할 때 둘 다 함께 부활한다(그룹당 확률 1회, 2026-08-30)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"], // 팀A — 이동할 말의 캐릭터는 무관, 유효한 조합이면 됨
+        ["교주", "성직"],
+        ["마담", "성직"], // 팀B — 이 두 말이 업혀서 함께 잡힐 스택
+        ["의사", "성직"], // 팀B — clients[3]-0은 항상 의사(그룹 밖의 구조자)
+      ],
+      { rng: () => 0 }, // 확률 판정 전부 성공
+    );
+
+    const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+    const moverId = `${moverSessionId}-0`;
+    const victim1Id = `${clients[2].sessionId}-0`;
+    const victim2Id = `${clients[2].sessionId}-1`;
+    const uisaId = `${clients[3].sessionId}-0`; // 항상 팀B, 캐릭터 "의사"
+
+    placeAt(room, moverId, 3);
+    placeAt(room, victim1Id, 8); // 3 + 5(모) — 도착 칸
+    placeAt(room, victim2Id, 8); // victim1과 업혀서 스택을 이룬 상태
+    placeAt(room, uisaId, 7); // victim들의 원래 칸(8)과 같은 줄(B: 6~10), 스택 밖의 별개 말
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS); // "모" — chains into another throw under the new rules
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(120); // "개" 구간 — 체인이 끝나 이동 가능(resolved)해진다
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id }); // "모"로 이동해 스택을 잡음
+    await flush();
+
+    const victim1 = room.state.pieces.find((p) => p.id === victim1Id)!;
+    const victim2 = room.state.pieces.find((p) => p.id === victim2Id)!;
+    expect(victim1.positionKind).toBe("outer");
+    expect(victim1.positionIndex).toBe(8); // 둘 다 의사가 구조
+    expect(victim2.positionKind).toBe("outer");
+    expect(victim2.positionIndex).toBe(8);
+  });
+
   // 스펙에서 가장 미묘한 규칙: 의사가 잡기를 무효화하면 잡기 보너스 던지기를 주지 않지만,
   // 성직이 리다이렉트하면(잡기 자체는 "유효"했던 것으로 취급) 보너스 던지기를 그대로 준다.
   // performMove의 두 hasEffectiveCapture(...) 호출이 이 구분을 실제로 지키는지 룸 레벨에서

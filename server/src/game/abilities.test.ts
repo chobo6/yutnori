@@ -245,11 +245,11 @@ describe("resolveCaptureResponses", () => {
     expect(victim.position).toEqual({ kind: "start" }); // 무효화되지 않음
   });
 
-  it("업기로 같이 있다가 한꺼번에 잡힌 다른 말은 의사가 구해줄 수 있다 — 의사 본인만 못 구한다(2026-08-30)", () => {
-    // uisa와 mate가 원래 같은 칸(8번)에 업혀 있다가 한꺼번에 잡혀 이미 start로 옮겨진 상태를
-    // 가정한다 — applyMove/applyGyojuBonus가 캡처된 말을 능력 판정보다 먼저 start로 옮기므로,
-    // 이 시점엔 uisa 자신도 이미 판 밖이다. 그래도 "같은 배치에서 함께 잡혔다"는 사실 자체는
-    // 유효해서, uisa는 자기 자신(uisa)은 못 구하지만 mate는 구할 수 있어야 한다.
+  it("업기로 같이 잡힌 말은 하나의 그룹으로 묶여, 그 그룹 안의 의사는 자기 그룹을 구할 후보가 못 된다(2026-08-30)", () => {
+    // uisa와 mate가 원래 같은 칸(8번)에 업혀 있다가 한꺼번에 잡혀 이미 start로 옮겨진 상태 —
+    // 둘은 originalPosition이 같으므로 하나의 그룹으로 묶인다. 그룹을 구할 의사 후보는 그
+    // 그룹의 "바깥"에 있어야 하는데, 이 시나리오엔 그룹 밖에 의사가 없다(uisa 자신은 그룹의
+    // 일부라 후보에서 제외) — 그룹 전체가 그대로 잡힌 채 유지된다.
     const pieces = [
       piece("uisa", "bob", "B", "의사", 0),
       piece("mate", "bob", "B", "교주", 0),
@@ -261,10 +261,70 @@ describe("resolveCaptureResponses", () => {
 
     const uisa = result.find((p) => p.id === "uisa")!;
     const mate = result.find((p) => p.id === "mate")!;
-    expect(uisa.position).toEqual({ kind: "start" }); // 의사 본인은 여전히 구조 안 됨
-    expect(mate.position).toEqual({ kind: "outer", index: 8 }); // 함께 잡혔던 다른 말은 구해줌
+    expect(uisa.position).toEqual({ kind: "start" });
+    expect(mate.position).toEqual({ kind: "start" }); // 그룹 안에서는 서로를 구할 수 없다
     expect(effects[0]).toEqual({ pieceId: "uisa", negated: false, redirectedTo: null, blockedBy: null });
-    expect(effects[1]).toEqual({ pieceId: "mate", negated: true, redirectedTo: null, blockedBy: null });
+    expect(effects[1]).toEqual({ pieceId: "mate", negated: false, redirectedTo: null, blockedBy: null });
+  });
+
+  it("겹쳐서(업기) 한꺼번에 잡힌 그룹은 그룹 밖의 의사가 성공하면 전부 함께 부활한다 — 확률은 그룹당 한 번만 판정(2026-08-30)", () => {
+    const pieces = [
+      piece("victim1", "bob", "B", "성직", 0),
+      piece("victim2", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 7), // victim들의 원래 칸(8)과 같은 줄(B), 그룹 밖의 의사
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    const captures = [capture("victim1", "B", 8), capture("victim2", "B", 8)]; // 업기 스택이 통째로 잡힘
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, captures, ALWAYS_SUCCEED);
+
+    const victim1 = result.find((p) => p.id === "victim1")!;
+    const victim2 = result.find((p) => p.id === "victim2")!;
+    expect(victim1.position).toEqual({ kind: "outer", index: 8 });
+    expect(victim2.position).toEqual({ kind: "outer", index: 8 }); // 둘 다 함께 부활
+    expect(effects).toEqual([
+      { pieceId: "victim1", negated: true, redirectedTo: null, blockedBy: null },
+      { pieceId: "victim2", negated: true, redirectedTo: null, blockedBy: null },
+    ]);
+  });
+
+  it("겹쳐서 잡힌 그룹은 의사가 실패하면 전부 그대로 잡힌 채 유지된다(일부만 부활하지 않는다, 2026-08-30)", () => {
+    const pieces = [
+      piece("victim1", "bob", "B", "성직", 0),
+      piece("victim2", "bob", "B", "마담", 0),
+      piece("uisa", "bob", "B", "의사", 7),
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    const captures = [capture("victim1", "B", 8), capture("victim2", "B", 8)];
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, captures, ALWAYS_FAIL);
+
+    const victim1 = result.find((p) => p.id === "victim1")!;
+    const victim2 = result.find((p) => p.id === "victim2")!;
+    expect(victim1.position).toEqual({ kind: "start" });
+    expect(victim2.position).toEqual({ kind: "start" });
+    expect(effects.every((e) => !e.negated && e.redirectedTo === null)).toBe(true);
+  });
+
+  it("겹쳐서 잡힌 그룹을 성직이 구하면 전부 같은 위치(성직의 현재 위치)로 함께 순간이동한다(2026-08-30)", () => {
+    const pieces = [
+      piece("victim1", "bob", "B", "마담", 0),
+      piece("victim2", "bob", "B", "교주", 0),
+      piece("seongjik", "bob", "B", "성직", 15),
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    const captures = [capture("victim1", "B", 8), capture("victim2", "B", 8)];
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, captures, ALWAYS_SUCCEED);
+
+    const victim1 = result.find((p) => p.id === "victim1")!;
+    const victim2 = result.find((p) => p.id === "victim2")!;
+    expect(victim1.position).toEqual({ kind: "outer", index: 15 });
+    expect(victim2.position).toEqual({ kind: "outer", index: 15 });
+    expect(effects).toEqual([
+      { pieceId: "victim1", negated: false, redirectedTo: "seongjik", blockedBy: null },
+      { pieceId: "victim2", negated: false, redirectedTo: "seongjik", blockedBy: null },
+    ]);
   });
 
   it("업기로 같이 잡힌 성직도(의사 없이) 다른 말을 순간이동으로 구해줄 수 있다 — 목적지는 성직 자신의 잡히기 직전 위치다(2026-08-30)", () => {

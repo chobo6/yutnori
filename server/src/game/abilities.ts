@@ -133,13 +133,14 @@ interface TryResponseResult {
 
 /**
  * 후보 p가 "판 위에 있다"고 볼 수 있는지 판단한다 — 보통은 현재 위치가 onBoard면 그만이지만,
- * 업기로 같은 칸에 있다가 이번 이동으로 한꺼번에 잡힌 다른 말(batch 안의 다른 CaptureRecord)은
- * 이미 대기 상태(start)로 옮겨진 뒤라 onBoard가 거짓이 된다 — 그 자신은 자기 자신을 구하지
- * 못하지만(호출부의 id !== capture.pieceId 조건), 업혀 있던 "다른" 말을 구하는 능력까지
- * 막히면 안 된다(요청자 확정, 2026-08-30). 그래서 p가 이미 같은 배치에서 잡힌 것으로
- * 확인되면, "잡히기 직전" 위치(그 자신의 CaptureRecord.originalPosition)를 대신 판정 기준으로
- * 쓴다 — 이미 앞선 캡처에서 의사/성직에 의해 복원/리다이렉트되어 실제로 판 위로 돌아온
- * 경우는 onBoard(p.position)가 먼저 참이 되어 그 최신 위치를 그대로 쓴다.
+ * 업기로 같은 칸에 있다가 이번 이동으로 한꺼번에 잡힌 다른 그룹의 말(siblingCaptures 안의
+ * 다른 CaptureRecord)은 이미 대기 상태(start)로 옮겨진 뒤라 onBoard가 거짓이 된다 — 그
+ * 자신이 속한 그룹은 스스로를 구하지 못하지만(호출부에서 그룹 멤버를 후보에서 제외),
+ * 이미 다른 그룹으로 처리가 끝나 판 위로 복원된 경우까지 막히면 안 된다(요청자 확정,
+ * 2026-08-30). 그래서 p가 어느 그룹의 캡처 기록에 해당하는 것으로 확인되면, "잡히기 직전"
+ * 위치(그 CaptureRecord.originalPosition)를 대신 판정 기준으로 쓴다 — 이미 앞선 그룹
+ * 처리에서 의사/성직에 의해 복원/리다이렉트되어 실제로 판 위로 돌아온 경우는
+ * onBoard(p.position)가 먼저 참이 되어 그 최신 위치를 그대로 쓴다.
  */
 function eligiblePosition(p: Piece, siblingCaptures: CaptureRecord[]): Position | null {
   if (onBoard(p.position)) return p.position;
@@ -147,25 +148,45 @@ function eligiblePosition(p: Piece, siblingCaptures: CaptureRecord[]): Position 
   return sibling ? sibling.originalPosition : null;
 }
 
-function tryUisa(pieces: Piece[], capture: CaptureRecord, siblingCaptures: CaptureRecord[], rng: Rng): TryResponseResult {
+/**
+ * 잡힘 이벤트들을 "같은 칸에서 한꺼번에 잡힌 그룹" 단위로 묶는다 — 업기 스택이 통째로
+ * 잡히면 originalPosition이 전부 동일하므로, 이 값이 같은 CaptureRecord들을 하나의 그룹으로
+ * 취급한다(2026-08-30 변경). 그룹 안의 각 말은 previousPosition만 서로 다를 수 있고
+ * (originalPreviousPosition), 위치 자체는 같다. 처음 등장한 순서를 그대로 유지한다.
+ */
+function groupCapturesByPosition(captures: CaptureRecord[]): CaptureRecord[][] {
+  const groups: CaptureRecord[][] = [];
+  for (const capture of captures) {
+    const existing = groups.find((g) => samePosition(g[0].originalPosition, capture.originalPosition));
+    if (existing) existing.push(capture);
+    else groups.push([capture]);
+  }
+  return groups;
+}
+
+function tryUisa(pieces: Piece[], group: CaptureRecord[], siblingCaptures: CaptureRecord[], rng: Rng): TryResponseResult {
+  const groupIds = new Set(group.map((c) => c.pieceId));
+  const teamId = group[0].teamId;
+  const originalPosition = group[0].originalPosition;
   const candidates = pieces.filter((p) => {
-    if (p.character !== "의사" || p.teamId !== capture.teamId || p.id === capture.pieceId) return false;
+    if (p.character !== "의사" || p.teamId !== teamId || groupIds.has(p.id)) return false;
     const position = eligiblePosition(p, siblingCaptures);
-    return position !== null && sameSide(position, capture.originalPosition);
+    return position !== null && sameSide(position, originalPosition);
   });
   let blockedBy: PieceId | null = null;
   for (const uisa of candidates) {
-    const blocker = isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng);
+    const blocker = isBlockedByMadam(pieces, teamId, originalPosition, rng);
     if (blocker) {
       blockedBy = blocker;
       continue;
     }
     if (roll(UISA_CHANCE, rng)) {
-      const result = pieces.map((p) =>
-        p.id === capture.pieceId
-          ? { ...p, position: capture.originalPosition, previousPosition: capture.originalPreviousPosition }
-          : p,
-      );
+      // 그룹 전체가 하나의 확률로 다같이 산다(2026-08-30) — 겹쳐서(업기) 한꺼번에 잡힌
+      // 말들에게 각자 독립적으로 35%를 따로 적용하면 일부만 살아남는 어색한 결과가 나온다.
+      const result = pieces.map((p) => {
+        const capture = group.find((c) => c.pieceId === p.id);
+        return capture ? { ...p, position: capture.originalPosition, previousPosition: capture.originalPreviousPosition } : p;
+      });
       return { pieces: result, blockedBy: null };
     }
   }
@@ -174,31 +195,31 @@ function tryUisa(pieces: Piece[], capture: CaptureRecord, siblingCaptures: Captu
 
 function trySeongjik(
   pieces: Piece[],
-  capture: CaptureRecord,
+  group: CaptureRecord[],
   siblingCaptures: CaptureRecord[],
   rng: Rng,
 ): TryResponseResult & { redirectedTo: PieceId | null } {
+  const groupIds = new Set(group.map((c) => c.pieceId));
+  const teamId = group[0].teamId;
+  const originalPosition = group[0].originalPosition;
   const candidates = pieces.filter(
-    (p) =>
-      p.character === "성직" &&
-      p.teamId === capture.teamId &&
-      p.id !== capture.pieceId &&
-      eligiblePosition(p, siblingCaptures) !== null,
+    (p) => p.character === "성직" && p.teamId === teamId && !groupIds.has(p.id) && eligiblePosition(p, siblingCaptures) !== null,
   );
   let blockedBy: PieceId | null = null;
   for (const seongjik of candidates) {
-    const blocker = isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng);
+    const blocker = isBlockedByMadam(pieces, teamId, originalPosition, rng);
     if (blocker) {
       blockedBy = blocker;
       continue;
     }
     if (roll(SEONGJIK_CHANCE, rng)) {
-      // 성직 후보 자신이 같은 배치에서 함께 잡혀 이미 대기 상태(start)로 옮겨진 경우, 순간이동
+      // 성직 후보 자신이 다른 그룹으로 함께 잡혀 이미 대기 상태(start)로 옮겨진 경우, 순간이동
       // 목적지는 그 성직의 "현재"(start) 위치가 아니라 잡히기 직전 위치여야 한다 — 그렇지
-      // 않으면 판 밖으로 순간이동시키는 무의미한 결과가 나온다.
+      // 않으면 판 밖으로 순간이동시키는 무의미한 결과가 나온다. 그룹 전체가 그 위치로 함께
+      // 순간이동한다(2026-08-30) — 개별 확률이 아니라 그룹 하나에 하나의 판정.
       const redirectPosition = eligiblePosition(seongjik, siblingCaptures)!;
       const result = pieces.map((p) =>
-        p.id === capture.pieceId ? { ...p, position: redirectPosition, previousPosition: redirectPosition } : p,
+        groupIds.has(p.id) ? { ...p, position: redirectPosition, previousPosition: redirectPosition } : p,
       );
       return { pieces: result, blockedBy: null, redirectedTo: seongjik.id };
     }
@@ -217,30 +238,38 @@ export interface CaptureEffect {
   blockedBy: PieceId | null;
 }
 
-function resolveOneCapture(
+function resolveOneGroup(
   pieces: Piece[],
-  capture: CaptureRecord,
+  group: CaptureRecord[],
   siblingCaptures: CaptureRecord[],
   rng: Rng,
-): { pieces: Piece[]; effect: CaptureEffect } {
-  const uisaAttempt = tryUisa(pieces, capture, siblingCaptures, rng);
+): { pieces: Piece[]; effects: CaptureEffect[] } {
+  const uisaAttempt = tryUisa(pieces, group, siblingCaptures, rng);
   if (uisaAttempt.pieces) {
     return {
       pieces: uisaAttempt.pieces,
-      effect: { pieceId: capture.pieceId, negated: true, redirectedTo: null, blockedBy: null },
+      effects: group.map((c) => ({ pieceId: c.pieceId, negated: true, redirectedTo: null, blockedBy: null })),
     };
   }
 
-  const seongjikAttempt = trySeongjik(pieces, capture, siblingCaptures, rng);
+  const seongjikAttempt = trySeongjik(pieces, group, siblingCaptures, rng);
   if (seongjikAttempt.pieces) {
     return {
       pieces: seongjikAttempt.pieces,
-      effect: { pieceId: capture.pieceId, negated: false, redirectedTo: seongjikAttempt.redirectedTo, blockedBy: null },
+      effects: group.map((c) => ({
+        pieceId: c.pieceId,
+        negated: false,
+        redirectedTo: seongjikAttempt.redirectedTo,
+        blockedBy: null,
+      })),
     };
   }
 
   const blockedBy = uisaAttempt.blockedBy ?? seongjikAttempt.blockedBy;
-  return { pieces, effect: { pieceId: capture.pieceId, negated: false, redirectedTo: null, blockedBy } };
+  return {
+    pieces,
+    effects: group.map((c) => ({ pieceId: c.pieceId, negated: false, redirectedTo: null, blockedBy })),
+  };
 }
 
 export interface CaptureResponseResult {
@@ -254,19 +283,25 @@ export interface CaptureResponseResult {
 /**
  * 잡힘 이벤트들을 스펙 §4 순서(의사 우선 -> 실패 시 성직)로 처리한다. captures 배열은
  * "발생 순서대로" 전달되어야 한다(원래 이동의 잡힘 -> 교주 보너스 전진의 잡힘 순).
- * captures 전체를 각 시도에 "같은 배치에서 함께 잡힌 말" 정보로 넘긴다 — 업기로 겹쳐
- * 있다가 한꺼번에 잡힌 말들은 서로가 서로를 구할 후보가 될 수 있어야 하기 때문이다
- * (본인 자신만 예외, tryUisa/trySeongjik의 id !== capture.pieceId 조건).
+ * 같은 칸에서 한꺼번에 잡힌(업기 스택) 말들은 originalPosition이 같으므로 하나의 그룹으로
+ * 묶여 단 한 번의 확률 판정으로 다같이 살거나 다같이 잡힌다(2026-08-30 변경, 요청자 확정 —
+ * 예전엔 겹쳐 잡힌 말 각각에 독립적으로 확률을 적용해 일부만 부활하는 결과가 나왔다).
+ * captures 전체를 각 그룹 시도에 "다른 그룹으로 함께 잡힌 말" 정보로 넘긴다 — 업기로 겹쳐
+ * 있다가 한꺼번에 잡힌 말들은 서로 다른 그룹을 구할 후보가 될 수 있어야 하기 때문이다
+ * (자기 그룹 멤버만 예외, tryUisa/trySeongjik의 groupIds.has(p.id) 조건).
  */
 export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): CaptureResponseResult {
+  const groups = groupCapturesByPosition(captures);
   let result = pieces;
   const negatedPieceIds: PieceId[] = [];
   const effects: CaptureEffect[] = [];
-  for (const capture of captures) {
-    const outcome = resolveOneCapture(result, capture, captures, rng);
+  for (const group of groups) {
+    const outcome = resolveOneGroup(result, group, captures, rng);
     result = outcome.pieces;
-    effects.push(outcome.effect);
-    if (outcome.effect.negated) negatedPieceIds.push(capture.pieceId);
+    for (const effect of outcome.effects) {
+      effects.push(effect);
+      if (effect.negated) negatedPieceIds.push(effect.pieceId);
+    }
   }
   return { pieces: result, negatedPieceIds, effects };
 }
