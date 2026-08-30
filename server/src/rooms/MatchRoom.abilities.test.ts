@@ -585,6 +585,46 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(received).toEqual([{ pieceId: moverId, character: "교주" }]);
   });
 
+  it("가만히 있던 교주 위로 다른 말이 이동해와 업힌 경우엔 발동하지 않는다(2026-08-30)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["성직", "교주"], // 팀A — ${sessionId}-0은 성직, -1은 교주
+        ["성직", "교주"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0 },
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`; // 성직(교주 아님) — 출발 칸(3)에는 혼자 있다
+    const gyojuId = `${sessionId}-1`; // 도착 칸(8)에 이미 자리잡고 가만히 있던 교주 — 이번 이동으로 움직이지 않았다
+    placeAt(room, moverId, 3);
+    placeAt(room, gyojuId, 8); // 3 + 5(모) = 8, 성직이 도착하는 바로 그 칸
+
+    const received: Array<{ pieceId: string; character: string }> = [];
+    moverClient.onMessage("abilityTriggered", (msg: { pieceId: string; character: string }) => received.push(msg));
+
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(120);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    const gyoju = room.state.pieces.find((p) => p.id === gyojuId)!;
+    expect(mover.positionIndex).toBe(8); // 3 + 5(모), 보너스 없음 — 가만히 있던 교주는 발동 주체가 아니다
+    expect(gyoju.positionIndex).toBe(8);
+    expect(received).toEqual([]); // abilityTriggered 없음
+  });
+
   it("교주 보너스가 모서리에서 발동하면 즉시 적용하지 않고 지름길 선택 대기 패로 쌓인다(2026-08-25)", async () => {
     const { room, clients } = await setupTeams(
       colyseus,
@@ -636,6 +676,45 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(moverAfterBonus.positionIndex).toBe(1);
     expect(allyAfterBonus.positionKind).toBe("shortcutIn5"); // 업힌 아군도 함께 지름길로 들어간다
     expect(room.state.pendingResults.length).toBe(0);
+  });
+
+  it("교주 보너스 대기 패를 제한시간 안에 쓰지 않으면 자동으로 대신 이동시켜주지 않고 그냥 사라진다(2026-08-30)", async () => {
+    const { room, clients } = await setupTeams(
+      colyseus,
+      [
+        ["교주", "성직"], // 팀A — ${sessionId}-0은 교주
+        ["교주", "성직"],
+        ["마담", "의사"],
+        ["마담", "의사"],
+      ],
+      { rng: () => 0, moveTimeoutMs: 300 },
+    );
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = clients.find((c) => c.sessionId === sessionId)!;
+    const moverId = `${sessionId}-0`; // 교주
+    const allyId = `${sessionId}-1`;
+    placeAt(room, moverId, 2);
+    placeAt(room, allyId, 2); // 업기 발생 -> 걸(3칸)로 도착 칸이 정확히 5번(지름길 모서리)
+
+    moverClient.send("throwStart", {});
+    await flush(225); // "걸" 구간
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("movePiece", { pieceId: moverId, resultId: room.state.pendingResults[0].id });
+    await flush();
+
+    // 지름길 선택 대기 패가 쌓였다 — 여기서 movePiece를 보내지 않고 제한시간을 넘긴다.
+    expect(room.state.pendingResults.length).toBe(1);
+    expect(room.state.pendingResults[0].result).toBe("gyojuBonus");
+    await flush(500); // moveTimeoutMs(300)보다 넉넉히 대기
+
+    const mover = room.state.pieces.find((p) => p.id === moverId)!;
+    const ally = room.state.pieces.find((p) => p.id === allyId)!;
+    expect(mover.positionIndex).toBe(5); // 자동으로 대신 이동되지 않고 모서리에 그대로 멈춰 있다
+    expect(ally.positionIndex).toBe(5);
+    expect(room.state.pendingResults.length).toBe(0); // 쓰지 않은 보너스는 그냥 사라진다(킵 안 됨)
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(sessionId); // 턴이 다음 사람에게 넘어감
   });
 
   it("교주 보너스 대기 패에서 지름길을 안 쓰면(useShortcut:false) 그냥 바깥길로 1칸 간다", async () => {

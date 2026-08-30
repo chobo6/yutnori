@@ -518,6 +518,14 @@ export class MatchRoom extends Room<MatchState> {
     if (!this.isCurrentTurn(sessionId)) return;
     const oldestPending = this.state.pendingResults[0];
     if (!oldestPending) return; // 이론상 도달 불가 — resolved 상태는 항상 pendingResults가 있어야 진입한다.
+    // 교주 보너스 트랙 선택 대기 패는 "발동한 시점"에만 쓸 수 있는 일회성 기회다(REQUIREMENTS.md
+    // §3.1) — 일반 던지기 패와 달리 제한시간 안에 스스로 방향을 고르지 않으면 대신 이동시켜
+    // 주지 않고 그냥 사라진다(2026-08-30). 이걸 일반 패처럼 자동 이동 대상으로 두면 "쓰지 않은
+    // 능력이 나중에도 계속 유지된다"는 잘못된 경험이 된다.
+    if (oldestPending.result === GYOJU_BONUS_RESULT) {
+      this.discardExpiredGyojuBonus(sessionId, oldestPending.id);
+      return;
+    }
     let target: PieceSchema | undefined;
     if (oldestPending.restrictedToPieceIds.length > 0) {
       target = this.state.pieces.find((p) => oldestPending.restrictedToPieceIds.includes(p.id));
@@ -531,6 +539,31 @@ export class MatchRoom extends Room<MatchState> {
     }
     if (!target) return; // 이론상 도달 불가 — 자기 말이 모두 완주했다면 이미 승리 처리되어 턴이 없다.
     this.performMove(sessionId, target.id, oldestPending.id, false);
+  }
+
+  /**
+   * 교주 보너스 트랙 선택 대기 패가 제한시간 안에 쓰이지 않았을 때의 처리 — performMove와
+   * 달리 실제 이동이 없으므로 승리 판정/포획 보너스 지급은 필요 없고, 그냥 이 패를 버린 뒤
+   * 나머지 진행(다른 대기 패가 있으면 이어서 처리, 없으면 턴 넘김)만 performMove의 마지막
+   * 분기와 동일하게 따른다.
+   */
+  private discardExpiredGyojuBonus(sessionId: string, pendingId: string) {
+    const index = this.state.pendingResults.findIndex((p) => p.id === pendingId);
+    if (index === -1) return;
+    this.state.pendingResults.splice(index, 1);
+
+    if (this.state.pendingResults.length > 0) {
+      this.state.gaugePhase = "resolved";
+      this.armMoveTimeout(sessionId);
+      return;
+    }
+
+    this.state.gaugePhase = "idle";
+    this.extraThrowsGranted = 0;
+    this.throwsOwed = 0;
+    this.state.lastThrowResult = "";
+    this.state.currentTurnIndex = nextTurnIndex(this.state.currentTurnIndex, Array.from(this.state.turnOrder));
+    this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
   }
 
   /** 실제 movePiece와 시간초과 자동 말 선택이 공유하는 "이동 실행" 로직. */
@@ -578,13 +611,14 @@ export class MatchRoom extends Room<MatchState> {
       };
     });
 
-    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1 — "도착한 위치의 아군 말에 업혔을 경우") — applyMove가
-    // 반환한 piggybackedIds는 "출발 칸" 기준(함께 움직인 말들만)이라 이 능력엔 그대로 못 쓴다.
-    // 이동한 말이 "도착한" 칸에 이미 아군 말이 있어서(그 아군은 이번 이동으로 움직이지 않고
-    // 제자리에 있다가 지금 막 업힌 경우) 업힌 상태가 된 경우도 발동해야 하므로, 이동이 끝난 뒤
-    // (afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을 다시 계산한다 — "출발 칸부터
-    // 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 이렇게 하면 자연스럽게 잡힌다. 그룹 안에
-    // 교주가 하나라도 있으면 80% 확률로 그룹 전원이 1칸 더 전진한다. result가 이미 교주 보너스
+    // 교주 능력(REQUIREMENTS.md 능력 스펙 §3.1) — 전진/포획 대상 그룹은 "도착 칸에 있는 전원"
+    // 기준이라 applyMove가 반환한 piggybackedIds("출발 칸" 기준, 함께 움직인 말들만)만으로는
+    // 부족하다. 이동이 끝난 뒤(afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을
+    // 다시 계산해 "출발 칸부터 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 그룹에 넣는다 —
+    // 성공 시 이 그룹 전원이 함께 전진한다. 다만 "발동 여부" 판정은 이 그룹 전체가 아니라
+    // 이번 이동으로 실제로 움직인 쪽(mover + 출발 칸 기준 piggybackedIds)만 본다(2026-08-30) —
+    // 가만히 있던 교주 위로 다른 말이 이동해와 업힌 경우까지 발동시키면 안 되기 때문이다
+    // (server/src/game/abilities.ts의 applyGyojuBonus 문서 참고). result가 이미 교주 보너스
     // 자체(GYOJU_BONUS_RESULT)라면 이 블록 전체를 건너뛴다 — 보너스 전진이 또 다른 보너스
     // 발동을 만들지 않는다는 스펙(§3.1 "연쇄 방지")을 지키는 가드다.
     let piecesAfterBonus = afterMove;
@@ -595,7 +629,7 @@ export class MatchRoom extends Room<MatchState> {
           (p) => p.id !== pieceId && p.ownerId === moverAfterMove.ownerId && samePosition(p.position, moverAfterMove.position),
         )
         .map((p) => p.id);
-      const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, this.rng);
+      const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, piggybackedIds, this.rng);
       if (bonus.fired && bonus.triggeredBy) {
         this.broadcastAbility(bonus.triggeredBy, "교주");
         // 모서리(5/10/15) 또는 정확히 중앙(centerCross)에 멈춰 선 경우 둘 다 다음 이동에 실제

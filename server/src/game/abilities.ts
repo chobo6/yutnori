@@ -63,11 +63,16 @@ function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosi
 }
 
 /**
- * 교주 능력(스펙 §3.1, 2026-08-24 조건 확장): 이번 이동으로 실제로 자리를 옮긴 말들
- * (이동한 말 자신 + 업혀서 함께 온 말들) 중 교주가 하나라도 있고, 업기가 발생했다면(업힌
- * 말이 최소 1개), 80% 확률로 그룹 전원이 1칸 추가 전진한다 — 교주가 직접 다른 말을 업고
- * 이동한 경우뿐 아니라, 다른 말에 업혀서 따라온 말이 교주인 경우도 발동 대상이다.
- * 보너스 전진 칸에 상대 말이 있으면 정상적으로 잡는다.
+ * 교주 능력(스펙 §3.1, 2026-08-30 조건 재정리): 발동 여부는 "이번 이동으로 실제로 자리를 옮긴
+ * 쪽"(이동한 말 자신 + 원래 업혀 있다가 함께 움직인 말들, `movedWithMoverIds`)에 교주가
+ * 있는지로만 판단한다 — 교주가 업힌 상태로 이동했거나(교주가 `movedWithMoverIds`에 포함),
+ * 교주 자신이 이동해서 다른 말에 업힌 경우(교주가 `moverId`)엔 발동 후보가 되지만, 반대로
+ * 가만히 있던 교주 위로 "다른 말"이 이동해와 업힌 경우는 교주가 이동 주체가 아니므로 발동
+ * 후보가 아니다(2026-08-30 이전엔 도착 칸 기준 전체 그룹으로 판정해 이 경우도 잘못 발동했음).
+ * 전진/포획 대상 그룹 자체는 여전히 도착 칸에 있는 전원(`landedGroupIds` — 원래 업혀 있던
+ * 말 + 도착 칸에 이미 서 있던 아군 말)이다 — 발동 "판정"만 좁아졌을 뿐, 성공 시 "누가
+ * 전진하는지"는 그대로다. 업기가 발생했다면(업힌 말이 최소 1개), 80% 확률로 그룹 전원이
+ * 1칸 추가 전진하고, 보너스 전진 칸에 상대 말이 있으면 정상적으로 잡는다.
  * 이 함수 자체는 재귀적으로 다시 호출되지 않는다(1회성) — 호출부(MatchRoom)가 보너스 전진의
  * 결과에 대해 이 함수를 다시 부르지 않으므로, 보너스로 이동한 그룹에 또 다른 교주가 있어도
  * 추가 발동은 일어나지 않는다.
@@ -75,16 +80,18 @@ function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosi
 export function applyGyojuBonus(
   pieces: Piece[],
   moverId: PieceId,
-  piggybackedIds: PieceId[],
+  landedGroupIds: PieceId[],
+  movedWithMoverIds: PieceId[],
   rng: Rng,
 ): GyojuBonusResult {
   const mover = pieces.find((p) => p.id === moverId);
-  if (!mover || piggybackedIds.length === 0 || !onBoard(mover.position)) {
+  if (!mover || landedGroupIds.length === 0 || !onBoard(mover.position)) {
     return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy: null };
   }
 
-  const groupIds = new Set([moverId, ...piggybackedIds]);
-  const gyojuInGroup = pieces.find((p) => groupIds.has(p.id) && p.character === "교주");
+  const groupIds = new Set([moverId, ...landedGroupIds]);
+  const eligibleIds = new Set([moverId, ...movedWithMoverIds]);
+  const gyojuInGroup = pieces.find((p) => eligibleIds.has(p.id) && p.character === "교주");
   if (!gyojuInGroup) {
     return { pieces, capturedPieceIds: [], fired: false, triggeredBy: null, blockedBy: null };
   }

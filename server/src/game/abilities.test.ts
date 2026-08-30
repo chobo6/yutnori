@@ -20,7 +20,7 @@ function piece(id: string, ownerId: string, teamId: string, character: string, i
 describe("applyGyojuBonus", () => {
   it("이동한 말도 업힌 말도 교주가 아니면 아무 일도 없다", () => {
     const pieces = [piece("p1", "alice", "A", "성직", 8), piece("p2", "alice", "A", "의사", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.pieces).toEqual(pieces);
     expect(result.capturedPieceIds).toEqual([]);
     expect(result.fired).toBe(false);
@@ -28,7 +28,7 @@ describe("applyGyojuBonus", () => {
 
   it("이동한 말은 교주가 아니어도 업힌 말이 교주면 발동한다(2026-08-24 조건 확장)", () => {
     const pieces = [piece("p1", "alice", "A", "성직", 8), piece("p2", "alice", "A", "교주", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     const p2 = result.pieces.find((p) => p.id === "p2")!;
     expect(result.fired).toBe(true);
@@ -37,22 +37,32 @@ describe("applyGyojuBonus", () => {
     expect(p2.position).toEqual({ kind: "outer", index: 9 });
   });
 
+  it("가만히 있던 교주 위로 다른 말이 이동해와 업힌 경우엔 발동하지 않는다(2026-08-30)", () => {
+    // p2(교주)는 이번 이동으로 전혀 움직이지 않았다 — landedGroupIds엔 있지만
+    // movedWithMoverIds엔 없다(제자리에 서 있다가 막 업힘). 교주 본인이 이동 주체가 아니므로
+    // 발동 후보가 아니다.
+    const pieces = [piece("p1", "alice", "A", "성직", 8), piece("p2", "alice", "A", "교주", 8)];
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], [], ALWAYS_SUCCEED);
+    expect(result.fired).toBe(false);
+    expect(result.pieces).toEqual(pieces);
+  });
+
   it("업힌 말이 없으면(piggybackedIds 빈 배열) 발동하지 않는다", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8)];
-    const result = applyGyojuBonus(pieces, "p1", [], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", [], [], ALWAYS_SUCCEED);
     expect(result.pieces).toEqual(pieces);
   });
 
   it("80% 확률 실패 시 보너스 전진이 일어나지 않는다", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_FAIL);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_FAIL);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     expect(p1.position).toEqual({ kind: "outer", index: 8 });
   });
 
   it("확률 성공 시 업힌 말 전원이 1칸 추가 전진한다", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     const p2 = result.pieces.find((p) => p.id === "p2")!;
     expect(p1.position).toEqual({ kind: "outer", index: 9 });
@@ -79,7 +89,7 @@ describe("applyGyojuBonus", () => {
         previousPosition: { kind: "start" },
       },
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.fired).toBe(true);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     expect(p1.position).toEqual({ kind: "shortcutCross", step: 2 }); // 1칸 추가 전진
@@ -90,7 +100,7 @@ describe("applyGyojuBonus", () => {
       piece("p1", "alice", "A", "교주", 8),
       piece("p2", "alice", "A", "교주", 8), // 1v1 중복 캐릭터 상황 가정
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.fired).toBe(true);
     expect(["p1", "p2"]).toContain(result.triggeredBy);
   });
@@ -101,7 +111,7 @@ describe("applyGyojuBonus", () => {
       piece("p2", "alice", "A", "성직", 8),
       piece("enemy1", "bob", "B", "의사", 9),
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const enemy = result.pieces.find((p) => p.id === "enemy1")!;
     expect(enemy.position).toEqual({ kind: "start" });
     expect(result.capturedPieceIds).toEqual(["enemy1"]);
@@ -113,7 +123,7 @@ describe("applyGyojuBonus", () => {
       piece("p2", "alice", "A", "성직", 8),
       piece("enemy-madam", "bob", "B", "마담", 7), // 변 B, 상대팀
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     expect(p1.position).toEqual({ kind: "outer", index: 8 }); // 저지되어 전진 없음
   });
@@ -122,7 +132,7 @@ describe("applyGyojuBonus", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
     pieces[0].position = { kind: "shortcutOut", step: 2 };
     pieces[1].position = { kind: "shortcutOut", step: 2 };
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     const p2 = result.pieces.find((p) => p.id === "p2")!;
     // shortcutOut 2단계에서 1칸 더 가면(3+2+1=6) 도착점(외곽 20번)에 멈춰 선다 — 도착점 도착만으로는
@@ -137,7 +147,7 @@ describe("applyGyojuBonus", () => {
       piece("p2", "alice", "A", "성직", 8),
       piece("enemy-madam", "bob", "B", "마담", 12), // 변 C, 다른 줄
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     const p1 = result.pieces.find((p) => p.id === "p1")!;
     expect(p1.position).toEqual({ kind: "outer", index: 9 }); // 정상 발동
   });
@@ -147,27 +157,27 @@ describe("applyGyojuBonus", () => {
       { ...piece("p1", "alice", "A", "교주", 8), position: { kind: "finished" as const } },
       piece("p2", "alice", "A", "성직", 8),
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.pieces).toEqual(pieces);
     expect(result.capturedPieceIds).toEqual([]);
   });
 
   it("발동에 성공하면 fired가 true다(UI 알림용)", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.fired).toBe(true);
     expect(result.blockedBy).toBeNull();
   });
 
   it("80% 확률에 실패하면 fired가 false다", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8), piece("p2", "alice", "A", "성직", 8)];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_FAIL);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_FAIL);
     expect(result.fired).toBe(false);
   });
 
   it("자격 자체가 안 되면(업힌 말 없음) fired가 false다", () => {
     const pieces = [piece("p1", "alice", "A", "교주", 8)];
-    const result = applyGyojuBonus(pieces, "p1", [], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", [], [], ALWAYS_SUCCEED);
     expect(result.fired).toBe(false);
     expect(result.blockedBy).toBeNull();
   });
@@ -178,7 +188,7 @@ describe("applyGyojuBonus", () => {
       piece("p2", "alice", "A", "성직", 8),
       piece("enemy-madam", "bob", "B", "마담", 7),
     ];
-    const result = applyGyojuBonus(pieces, "p1", ["p2"], ALWAYS_SUCCEED);
+    const result = applyGyojuBonus(pieces, "p1", ["p2"], ["p2"], ALWAYS_SUCCEED);
     expect(result.fired).toBe(false);
     expect(result.blockedBy).toBe("enemy-madam");
   });
