@@ -874,6 +874,101 @@ describe("MatchRoom", () => {
     });
   });
 
+  describe("게임 종료 후 대기실 복귀(2026-08-30~)", () => {
+    /** setupFourPlayers로 시작한 게임을 "한 말만 한 칸 더 가면 완주"하는 상태로 만들어 곧바로
+     * 승리 판정까지 끝낸다 — "게임이 끝나면 metadata.phase가 finished로 바뀐다" 테스트와 동일한
+     * 기법(도착점에 이미 있는 말이 도(1칸)로 완주). */
+    async function finishGame(colyseus: ColyseusTestServer, options: Record<string, unknown> = {}) {
+      const { room, clients } = await setupFourPlayers(colyseus, options);
+      const winnerSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const winnerClient = clients.find((c) => c.sessionId === winnerSessionId)!;
+      const winnerPieces = room.state.pieces.filter((p) => p.ownerSessionId === winnerSessionId);
+      winnerPieces[0].positionKind = "finished";
+      winnerPieces[0].positionIndex = -1;
+      winnerPieces[1].positionKind = "outer";
+      winnerPieces[1].positionIndex = 20;
+
+      winnerClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      winnerClient.send("throwRelease", {});
+      await flush();
+      winnerClient.send("movePiece", { pieceId: winnerPieces[1].id, resultId: room.state.pendingResults[0].id });
+      await flush();
+
+      return { room, clients, winnerSessionId };
+    }
+
+    it("게임이 끝난 뒤 플레이어가 returnToWaitingRoom을 보내면 phase가 waiting으로 돌아가고 진행 상태가 초기화된다", async () => {
+      const { room, clients } = await finishGame(colyseus);
+      expect(room.state.phase).toBe("finished");
+
+      clients[0].send("returnToWaitingRoom", {});
+      await flush();
+
+      expect(room.state.phase).toBe("waiting");
+      expect(room.metadata?.phase).toBe("waiting");
+      expect(room.state.pieces.length).toBe(0);
+      expect(room.state.turnOrder.length).toBe(0);
+      expect(room.state.currentTurnIndex).toBe(0);
+      expect(room.state.pendingResults.length).toBe(0);
+      expect(room.state.winnerSessionId).toBe("");
+      expect(room.state.gaugePhase).toBe("idle");
+      expect(room.state.turnDeadlineAt).toBe(0);
+    });
+
+    it("대기실로 돌아가면 준비 완료 상태는 초기화되지만 팀/캐릭터 선택은 유지된다", async () => {
+      const { room, clients } = await finishGame(colyseus);
+      const playersBefore = Array.from(room.state.players.values()).map((p) => ({
+        team: p.team,
+        characters: Array.from(p.characters),
+      }));
+
+      clients[0].send("returnToWaitingRoom", {});
+      await flush();
+
+      const playersAfter = Array.from(room.state.players.values());
+      expect(playersAfter.every((p) => p.ready === false)).toBe(true);
+      expect(playersAfter.map((p) => ({ team: p.team, characters: Array.from(p.characters) }))).toEqual(
+        playersBefore,
+      );
+    });
+
+    it("대기실로 돌아간 뒤 전원 다시 준비 완료를 누르면 새 게임이 시작된다", async () => {
+      const { room, clients } = await finishGame(colyseus);
+      clients[0].send("returnToWaitingRoom", {});
+      await flush();
+
+      for (const client of clients) client.send("ready", {});
+      await flush();
+
+      expect(room.state.phase).toBe("playing");
+      expect(room.state.pieces.length).toBe(8); // 2v2, 각 2개씩
+      expect(room.state.winnerSessionId).toBe("");
+    });
+
+    it("게임이 끝나지 않은 상태(playing)에서는 returnToWaitingRoom을 보내도 무시된다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus);
+      expect(room.state.phase).toBe("playing");
+
+      clients[0].send("returnToWaitingRoom", {});
+      await flush();
+
+      expect(room.state.phase).toBe("playing");
+    });
+
+    it("관전자가 returnToWaitingRoom을 보내도 무시된다", async () => {
+      const { room } = await finishGame(colyseus);
+      const spectatorClient = await connectAsUser(colyseus, room, "종료후관전");
+      await flush();
+      expect(room.state.spectators.has(spectatorClient.sessionId)).toBe(true);
+
+      spectatorClient.send("returnToWaitingRoom", {});
+      await flush();
+
+      expect(room.state.phase).toBe("finished");
+    });
+  });
+
   describe("재접속(2026-08-29~)", () => {
     it("게임 진행 중 갑작스런 연결 끊김은 유예 시간 안에 재접속하면 게임 상태가 그대로 유지된다", async () => {
       // reconnectionGraceSeconds를 짧게 줘서(5초) 테스트가 실제 20초를 기다리지 않게 한다.

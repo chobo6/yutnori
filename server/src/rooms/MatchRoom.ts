@@ -142,6 +142,15 @@ export class MatchRoom extends Room<MatchState> {
       this.maybeStartGame();
     });
 
+    // 게임 종료 후 로비로 나가지 않고 같은 방의 대기실로 바로 돌아간다(2026-08-30 추가) —
+    // 플레이어 아무나 눌러도 방 전체에 즉시 적용된다(팀 배정/준비 완료 토글과 같은 패턴).
+    // 관전자는 대상이 아니다(자기 말이 없으니 "대기실로"의 의미가 없다 — 그대로 관전 유지).
+    this.onMessage("returnToWaitingRoom", (client) => {
+      if (this.state.phase !== "finished") return;
+      if (!this.state.players.has(client.sessionId)) return;
+      this.returnToWaitingRoom();
+    });
+
     this.onMessage("throwStart", (client) => {
       if (!this.isCurrentTurn(client.sessionId) || this.state.gaugePhase !== "idle") return;
       this.state.gaugePhase = "charging";
@@ -434,6 +443,32 @@ export class MatchRoom extends Room<MatchState> {
     // 않고, onJoin이 phase를 보고 플레이어/관전자를 직접 가른다(관전 방지는 allowSpectators로).
     this.setMetadata({ phase: "playing" });
     this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
+  }
+
+  /**
+   * "returnToWaitingRoom" 메시지 처리 — maybeStartGame이 채웠던 진행 상태를 전부 되돌려
+   * phase를 다시 "waiting"으로 만든다. 팀/캐릭터 선택은 편의상 그대로 유지하고(다시 고르지
+   * 않아도 되게), 준비 완료만 초기화해서 전원이 다시 "준비 완료"를 눌러야 새 게임이 시작되게
+   * 한다 — 누군가의 실수/뒤늦은 클릭으로 곧바로 재시작돼버리는 걸 막기 위함이다.
+   */
+  private returnToWaitingRoom() {
+    this.state.phase = "waiting";
+    this.setMetadata({ phase: "waiting" });
+    this.state.pieces.clear();
+    this.state.turnOrder.clear();
+    this.state.currentTurnIndex = 0;
+    this.state.pendingResults.clear();
+    this.state.winnerSessionId = "";
+    this.state.gaugePhase = "idle";
+    this.state.throwStartAt = 0;
+    this.state.lastThrowResult = "";
+    this.state.turnDeadlineAt = 0;
+    this.extraThrowsGranted = 0;
+    this.throwsOwed = 0;
+    this.turnToken++; // 혹시 남아있을 예전 던지기/이동 타이머 콜백을 무력화
+    for (const player of this.state.players.values()) {
+      player.ready = false;
+    }
   }
 
   /**

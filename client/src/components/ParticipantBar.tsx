@@ -20,7 +20,7 @@ export function ParticipantBar({
   const spectators = Array.from(room.state.spectators.values());
 
   // 나가기는 대기실에서만 보여준다(요청자 확정) — 플레이 중엔 없고, 종료 화면은 WinnerScreen이
-  // 이미 "로비로 돌아가기" 버튼을 따로 갖고 있다.
+  // 이미 "대기실로 돌아가기"/"나가기" 버튼을 따로 갖고 있다(2026-08-30~).
   // room.leave() 호출은 App.tsx의 handleLeaveLobby로 중앙화됐다(2026-08-29~) — 재접속
   // 기능이 room.onLeave를 구독해서 "의도치 않은 끊김"과 "나가기 버튼 클릭"을 구분해야 하는데,
   // 이 함수가 직접 room.leave()를 부르면 그 구분이 App.tsx 밖에서 일어나 놓치게 된다.
