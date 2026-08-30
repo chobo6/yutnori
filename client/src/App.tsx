@@ -180,7 +180,10 @@ function App() {
       {room.state.phase === "waiting" && <WaitingRoom room={room} />}
 
       {room.state.phase === "playing" && corners && (
-        <div className={styles.playScreen}>
+        // 말/도착 칸 클릭은 각자 stopPropagation을 하므로 여기까진 안 올라온다 — 그 외
+        // 빈 공간(보드 바깥, 코너 카드 배경 등) 아무 데나 클릭하면 선택을 해제한다
+        // (2026-08-30 추가 — 예전엔 보드 안쪽 빈 공간만 그렇게 동작했다).
+        <div className={styles.playScreen} onClick={() => setSelectedPieceId(null)}>
           <div className={styles.topLeft}>
             {corners.topLeft && (
               <PlayerCorner

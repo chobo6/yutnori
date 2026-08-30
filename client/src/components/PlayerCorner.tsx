@@ -47,7 +47,17 @@ export function PlayerCorner({
             className={`${styles.waitingPiece} ${canSelect ? styles.waitingPieceSelectable : ""} ${
               p.id === selectedPieceId ? styles.waitingPieceSelected : ""
             }`}
-            onClick={canSelect ? () => onSelectPiece(p.id === selectedPieceId ? null : p.id) : undefined}
+            onClick={
+              canSelect
+                ? (e) => {
+                    // App.tsx의 .playScreen이 "빈 곳 클릭하면 선택 해제"를 담당하게 되면서
+                    // (2026-08-30~) 이 클릭도 그대로 버블링되면 방금 고른 선택이 곧바로
+                    // 풀려버린다 — 다른 선택 가능 요소(GameBoard의 말/도착점)와 동일하게 막는다.
+                    e.stopPropagation();
+                    onSelectPiece(p.id === selectedPieceId ? null : p.id);
+                  }
+                : undefined
+            }
           >
             <PieceToken character={p.character} team={player?.team ?? ""} size="corner" />
           </div>

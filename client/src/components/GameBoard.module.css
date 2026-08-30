@@ -89,6 +89,16 @@
   animation: destinationPulse 1s ease-in-out infinite;
 }
 
+/* 클릭/터치 가능한 범위만 넓히고 눈에 보이는 점 크기는 그대로 둔다 — 업기(피기백) 대상
+   칸처럼 이미 말이 있는 곳 위에 겹쳐 뜰 때 점이 작아서 클릭이 잘 안 된다는 신고로
+   추가함(2026-08-30). 의사 엘리먼트도 부모(.destinationDot)의 클릭 영역으로 그대로
+   합쳐지므로 별도 클릭 핸들러가 필요 없다. */
+.destinationDot::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+
 @keyframes destinationPulse {
   0%,
   100% {
