@@ -131,15 +131,28 @@ interface TryResponseResult {
   blockedBy: PieceId | null;
 }
 
-function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResponseResult {
-  const candidates = pieces.filter(
-    (p) =>
-      p.character === "의사" &&
-      p.teamId === capture.teamId &&
-      p.id !== capture.pieceId &&
-      onBoard(p.position) &&
-      sameSide(p.position, capture.originalPosition),
-  );
+/**
+ * 후보 p가 "판 위에 있다"고 볼 수 있는지 판단한다 — 보통은 현재 위치가 onBoard면 그만이지만,
+ * 업기로 같은 칸에 있다가 이번 이동으로 한꺼번에 잡힌 다른 말(batch 안의 다른 CaptureRecord)은
+ * 이미 대기 상태(start)로 옮겨진 뒤라 onBoard가 거짓이 된다 — 그 자신은 자기 자신을 구하지
+ * 못하지만(호출부의 id !== capture.pieceId 조건), 업혀 있던 "다른" 말을 구하는 능력까지
+ * 막히면 안 된다(요청자 확정, 2026-08-30). 그래서 p가 이미 같은 배치에서 잡힌 것으로
+ * 확인되면, "잡히기 직전" 위치(그 자신의 CaptureRecord.originalPosition)를 대신 판정 기준으로
+ * 쓴다 — 이미 앞선 캡처에서 의사/성직에 의해 복원/리다이렉트되어 실제로 판 위로 돌아온
+ * 경우는 onBoard(p.position)가 먼저 참이 되어 그 최신 위치를 그대로 쓴다.
+ */
+function eligiblePosition(p: Piece, siblingCaptures: CaptureRecord[]): Position | null {
+  if (onBoard(p.position)) return p.position;
+  const sibling = siblingCaptures.find((c) => c.pieceId === p.id);
+  return sibling ? sibling.originalPosition : null;
+}
+
+function tryUisa(pieces: Piece[], capture: CaptureRecord, siblingCaptures: CaptureRecord[], rng: Rng): TryResponseResult {
+  const candidates = pieces.filter((p) => {
+    if (p.character !== "의사" || p.teamId !== capture.teamId || p.id === capture.pieceId) return false;
+    const position = eligiblePosition(p, siblingCaptures);
+    return position !== null && sameSide(position, capture.originalPosition);
+  });
   let blockedBy: PieceId | null = null;
   for (const uisa of candidates) {
     const blocker = isBlockedByMadam(pieces, capture.teamId, capture.originalPosition, rng);
@@ -159,9 +172,18 @@ function tryUisa(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResponse
   return { pieces: null, blockedBy };
 }
 
-function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResponseResult & { redirectedTo: PieceId | null } {
+function trySeongjik(
+  pieces: Piece[],
+  capture: CaptureRecord,
+  siblingCaptures: CaptureRecord[],
+  rng: Rng,
+): TryResponseResult & { redirectedTo: PieceId | null } {
   const candidates = pieces.filter(
-    (p) => p.character === "성직" && p.teamId === capture.teamId && p.id !== capture.pieceId && onBoard(p.position),
+    (p) =>
+      p.character === "성직" &&
+      p.teamId === capture.teamId &&
+      p.id !== capture.pieceId &&
+      eligiblePosition(p, siblingCaptures) !== null,
   );
   let blockedBy: PieceId | null = null;
   for (const seongjik of candidates) {
@@ -171,8 +193,12 @@ function trySeongjik(pieces: Piece[], capture: CaptureRecord, rng: Rng): TryResp
       continue;
     }
     if (roll(SEONGJIK_CHANCE, rng)) {
+      // 성직 후보 자신이 같은 배치에서 함께 잡혀 이미 대기 상태(start)로 옮겨진 경우, 순간이동
+      // 목적지는 그 성직의 "현재"(start) 위치가 아니라 잡히기 직전 위치여야 한다 — 그렇지
+      // 않으면 판 밖으로 순간이동시키는 무의미한 결과가 나온다.
+      const redirectPosition = eligiblePosition(seongjik, siblingCaptures)!;
       const result = pieces.map((p) =>
-        p.id === capture.pieceId ? { ...p, position: seongjik.position, previousPosition: seongjik.position } : p,
+        p.id === capture.pieceId ? { ...p, position: redirectPosition, previousPosition: redirectPosition } : p,
       );
       return { pieces: result, blockedBy: null, redirectedTo: seongjik.id };
     }
@@ -194,9 +220,10 @@ export interface CaptureEffect {
 function resolveOneCapture(
   pieces: Piece[],
   capture: CaptureRecord,
+  siblingCaptures: CaptureRecord[],
   rng: Rng,
 ): { pieces: Piece[]; effect: CaptureEffect } {
-  const uisaAttempt = tryUisa(pieces, capture, rng);
+  const uisaAttempt = tryUisa(pieces, capture, siblingCaptures, rng);
   if (uisaAttempt.pieces) {
     return {
       pieces: uisaAttempt.pieces,
@@ -204,7 +231,7 @@ function resolveOneCapture(
     };
   }
 
-  const seongjikAttempt = trySeongjik(pieces, capture, rng);
+  const seongjikAttempt = trySeongjik(pieces, capture, siblingCaptures, rng);
   if (seongjikAttempt.pieces) {
     return {
       pieces: seongjikAttempt.pieces,
@@ -227,13 +254,16 @@ export interface CaptureResponseResult {
 /**
  * 잡힘 이벤트들을 스펙 §4 순서(의사 우선 -> 실패 시 성직)로 처리한다. captures 배열은
  * "발생 순서대로" 전달되어야 한다(원래 이동의 잡힘 -> 교주 보너스 전진의 잡힘 순).
+ * captures 전체를 각 시도에 "같은 배치에서 함께 잡힌 말" 정보로 넘긴다 — 업기로 겹쳐
+ * 있다가 한꺼번에 잡힌 말들은 서로가 서로를 구할 후보가 될 수 있어야 하기 때문이다
+ * (본인 자신만 예외, tryUisa/trySeongjik의 id !== capture.pieceId 조건).
  */
 export function resolveCaptureResponses(pieces: Piece[], captures: CaptureRecord[], rng: Rng): CaptureResponseResult {
   let result = pieces;
   const negatedPieceIds: PieceId[] = [];
   const effects: CaptureEffect[] = [];
   for (const capture of captures) {
-    const outcome = resolveOneCapture(result, capture, rng);
+    const outcome = resolveOneCapture(result, capture, captures, rng);
     result = outcome.pieces;
     effects.push(outcome.effect);
     if (outcome.effect.negated) negatedPieceIds.push(capture.pieceId);

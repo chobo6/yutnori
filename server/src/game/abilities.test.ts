@@ -245,6 +245,48 @@ describe("resolveCaptureResponses", () => {
     expect(victim.position).toEqual({ kind: "start" }); // 무효화되지 않음
   });
 
+  it("업기로 같이 있다가 한꺼번에 잡힌 다른 말은 의사가 구해줄 수 있다 — 의사 본인만 못 구한다(2026-08-30)", () => {
+    // uisa와 mate가 원래 같은 칸(8번)에 업혀 있다가 한꺼번에 잡혀 이미 start로 옮겨진 상태를
+    // 가정한다 — applyMove/applyGyojuBonus가 캡처된 말을 능력 판정보다 먼저 start로 옮기므로,
+    // 이 시점엔 uisa 자신도 이미 판 밖이다. 그래도 "같은 배치에서 함께 잡혔다"는 사실 자체는
+    // 유효해서, uisa는 자기 자신(uisa)은 못 구하지만 mate는 구할 수 있어야 한다.
+    const pieces = [
+      piece("uisa", "bob", "B", "의사", 0),
+      piece("mate", "bob", "B", "교주", 0),
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    const captures = [capture("uisa", "B", 8), capture("mate", "B", 8)]; // 둘 다 원래 8번 칸에서 잡힘
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, captures, ALWAYS_SUCCEED);
+
+    const uisa = result.find((p) => p.id === "uisa")!;
+    const mate = result.find((p) => p.id === "mate")!;
+    expect(uisa.position).toEqual({ kind: "start" }); // 의사 본인은 여전히 구조 안 됨
+    expect(mate.position).toEqual({ kind: "outer", index: 8 }); // 함께 잡혔던 다른 말은 구해줌
+    expect(effects[0]).toEqual({ pieceId: "uisa", negated: false, redirectedTo: null, blockedBy: null });
+    expect(effects[1]).toEqual({ pieceId: "mate", negated: true, redirectedTo: null, blockedBy: null });
+  });
+
+  it("업기로 같이 잡힌 성직도(의사 없이) 다른 말을 순간이동으로 구해줄 수 있다 — 목적지는 성직 자신의 잡히기 직전 위치다(2026-08-30)", () => {
+    const pieces = [
+      piece("seongjik", "bob", "B", "성직", 0),
+      piece("mate", "bob", "B", "교주", 0),
+    ];
+    pieces[0].position = { kind: "start" };
+    pieces[1].position = { kind: "start" };
+    // 둘이 원래 서로 다른 칸에서 각자 잡혔다고 가정(같은 배치의 서로 다른 잡힘 이벤트) —
+    // 성직은 "같은 줄" 제한이 없으므로 이렇게 달라도 후보가 될 수 있다.
+    const captures = [capture("seongjik", "B", 5), capture("mate", "B", 8)];
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, captures, ALWAYS_SUCCEED);
+
+    const seongjik = result.find((p) => p.id === "seongjik")!;
+    const mate = result.find((p) => p.id === "mate")!;
+    expect(seongjik.position).toEqual({ kind: "start" }); // 성직 본인은 구조 안 됨(의사가 없으므로)
+    expect(mate.position).toEqual({ kind: "outer", index: 5 }); // 성직 자신의 원래 위치로 순간이동
+    expect(mate.previousPosition).toEqual({ kind: "outer", index: 5 });
+    expect(effects[1]).toEqual({ pieceId: "mate", negated: false, redirectedTo: "seongjik", blockedBy: null });
+  });
+
   it("의사는 '같은 줄'이 아니면 발동 후보에서 제외된다(성직으로 넘어간다)", () => {
     const pieces = [
       piece("victim", "bob", "B", "마담", 0),
