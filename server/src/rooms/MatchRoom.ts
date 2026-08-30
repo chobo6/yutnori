@@ -518,14 +518,6 @@ export class MatchRoom extends Room<MatchState> {
     if (!this.isCurrentTurn(sessionId)) return;
     const oldestPending = this.state.pendingResults[0];
     if (!oldestPending) return; // 이론상 도달 불가 — resolved 상태는 항상 pendingResults가 있어야 진입한다.
-    // 교주 보너스 트랙 선택 대기 패는 "발동한 시점"에만 쓸 수 있는 일회성 기회다(REQUIREMENTS.md
-    // §3.1) — 일반 던지기 패와 달리 제한시간 안에 스스로 방향을 고르지 않으면 대신 이동시켜
-    // 주지 않고 그냥 사라진다(2026-08-30). 이걸 일반 패처럼 자동 이동 대상으로 두면 "쓰지 않은
-    // 능력이 나중에도 계속 유지된다"는 잘못된 경험이 된다.
-    if (oldestPending.result === GYOJU_BONUS_RESULT) {
-      this.discardExpiredGyojuBonus(sessionId, oldestPending.id);
-      return;
-    }
     let target: PieceSchema | undefined;
     if (oldestPending.restrictedToPieceIds.length > 0) {
       target = this.state.pieces.find((p) => oldestPending.restrictedToPieceIds.includes(p.id));
@@ -541,31 +533,6 @@ export class MatchRoom extends Room<MatchState> {
     this.performMove(sessionId, target.id, oldestPending.id, false);
   }
 
-  /**
-   * 교주 보너스 트랙 선택 대기 패가 제한시간 안에 쓰이지 않았을 때의 처리 — performMove와
-   * 달리 실제 이동이 없으므로 승리 판정/포획 보너스 지급은 필요 없고, 그냥 이 패를 버린 뒤
-   * 나머지 진행(다른 대기 패가 있으면 이어서 처리, 없으면 턴 넘김)만 performMove의 마지막
-   * 분기와 동일하게 따른다.
-   */
-  private discardExpiredGyojuBonus(sessionId: string, pendingId: string) {
-    const index = this.state.pendingResults.findIndex((p) => p.id === pendingId);
-    if (index === -1) return;
-    this.state.pendingResults.splice(index, 1);
-
-    if (this.state.pendingResults.length > 0) {
-      this.state.gaugePhase = "resolved";
-      this.armMoveTimeout(sessionId);
-      return;
-    }
-
-    this.state.gaugePhase = "idle";
-    this.extraThrowsGranted = 0;
-    this.throwsOwed = 0;
-    this.state.lastThrowResult = "";
-    this.state.currentTurnIndex = nextTurnIndex(this.state.currentTurnIndex, Array.from(this.state.turnOrder));
-    this.armThrowTimeout(this.state.turnOrder[this.state.currentTurnIndex]);
-  }
-
   /** 실제 movePiece와 시간초과 자동 말 선택이 공유하는 "이동 실행" 로직. */
   private performMove(sessionId: string, pieceId: string, resultId: string, useShortcut: boolean) {
     if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase !== "resolved") return;
@@ -573,9 +540,11 @@ export class MatchRoom extends Room<MatchState> {
     // 교주 보너스는 "발동한 시점"에만 유효한 일회성 기회다(REQUIREMENTS.md §3.1) — 제한시간이
     // 남아있어도, 다른 패를 먼저 쓰기로 한 결정 자체가 곧 그 기회가 지나갔다는 뜻이다. 지금
     // 쓰려는 패(resultId)가 그 보너스 자신이 아니라면, 아직 안 쓰고 남아있는 교주 보너스를
-    // 이번 이동을 적용하기 전에 먼저 버린다(2026-08-30 — 시간초과로만 사라지는 게 아니라, 몇
-    // 초가 남았든 다른 패를 먼저 쓰는 순간 바로 사라져야 한다. 시간초과 자체로 사라지는
-    // 경우는 아래 autoMove의 별도 분기가 처리한다).
+    // 이번 이동을 적용하기 전에 먼저 버린다(2026-08-30). 반대로 플레이어가 그냥 아무 것도
+    // 안 하고 시간초과된 경우(autoMove가 이 보너스 자신을 오래된 패로 골라 여기로 넘어온
+    // 경우)는 이 반복문에서 걸러지지 않는다(resultId가 이 보너스 자신이라 stale.id!==resultId
+    // 조건에 안 걸림) — 일반 패와 동일하게 서버가 대신 이동시켜준다(2026-08-30, useShortcut
+    // 기본값 false).
     for (let i = this.state.pendingResults.length - 1; i >= 0; i--) {
       const stale = this.state.pendingResults[i];
       if (stale.result === GYOJU_BONUS_RESULT && stale.id !== resultId) {

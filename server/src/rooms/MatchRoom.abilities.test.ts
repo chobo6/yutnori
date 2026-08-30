@@ -678,7 +678,7 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(room.state.pendingResults.length).toBe(0);
   });
 
-  it("교주 보너스 대기 패를 제한시간 안에 쓰지 않으면 자동으로 대신 이동시켜주지 않고 그냥 사라진다(2026-08-30)", async () => {
+  it("교주 보너스 대기 패를 제한시간 안에 스스로 쓰지 않으면 일반 패와 동일하게 서버가 대신 이동시킨다(지름길 미사용, 2026-08-30)", async () => {
     const { room, clients } = await setupTeams(
       colyseus,
       [
@@ -711,9 +711,9 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
 
     const mover = room.state.pieces.find((p) => p.id === moverId)!;
     const ally = room.state.pieces.find((p) => p.id === allyId)!;
-    expect(mover.positionIndex).toBe(5); // 자동으로 대신 이동되지 않고 모서리에 그대로 멈춰 있다
-    expect(ally.positionIndex).toBe(5);
-    expect(room.state.pendingResults.length).toBe(0); // 쓰지 않은 보너스는 그냥 사라진다(킵 안 됨)
+    expect(mover.positionIndex).toBe(6); // 5 + 1(보너스), 시간초과라 지름길 없이 자동 이동
+    expect(ally.positionIndex).toBe(6);
+    expect(room.state.pendingResults.length).toBe(0); // 자동으로 소진됨
     expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(sessionId); // 턴이 다음 사람에게 넘어감
   });
 
