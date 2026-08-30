@@ -22,7 +22,7 @@ export const SHORTCUT_JUNCTIONS: ReadonlySet<number> = new Set([5, 10]);
 // 더 나가야 비로소 완주(finished)한다. 그래서 바깥길의 마지막 유효 칸이 19에서 20으로
 // 늘었다 — 20은 실제로 밟고 멈춰 설 수 있는 평범한 outer 칸이고(같은 이유로 업기/잡기 판정도
 // 다른 칸과 동일하게 그대로 적용된다), 21 이상으로 넘어가는 순간에만 finished가 된다.
-const LAST_OUTER_INDEX = 20;
+export const LAST_OUTER_INDEX = 20;
 
 /**
  * "finish" 트랙(10번/15번 진입, 항상 완주 방향으로 나감) 경로를 "모서리를 절대값 0으로 하는

@@ -981,16 +981,19 @@ describe("MatchRoom", () => {
       expect(room.state.turnOrder[room.state.currentTurnIndex]).toBe(currentTurnSessionId);
     });
 
-    it("판 위에 있는 말을 골라 직접 시작점으로 되돌릴 수 있다(첫 줄 '도' 자리 등)", async () => {
+    it("판 위에 있는 말을 골라 직접 도착점(외곽 20번)으로 되돌릴 수 있다(첫 줄 '도' 자리 등, 2026-08-30 수정)", async () => {
       const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1) });
       const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
       const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
       const myPieces = room.state.pieces.filter((p) => p.ownerSessionId === currentTurnSessionId);
-      // 첫 줄 "도" 자리(외곽 1번)에서 온 상태 — 시작 후 첫 이동은 previousPosition이 항상 start다.
+      // 첫 줄 "도" 자리(외곽 1번)에서 온 상태 — 보드는 시작점/도착점이 물리적으로 같은 모서리를
+      // 도는 순환 트랙이라, 대기 상태에서 막 나온 말의 previousPosition은 "대기 상태"가 아니라
+      // 도착점(외곽 20번)이어야 한다(2026-08-30 수정 — 예전엔 start로 잘못 기록해서, 도착점에
+      // 있던 상대 말과 전혀 상호작용 없이 그냥 대기 상태로 사라져버리는 버그가 있었다).
       myPieces[0].positionKind = "outer";
       myPieces[0].positionIndex = 1;
-      myPieces[0].previousPositionKind = "start";
-      myPieces[0].previousPositionIndex = -1;
+      myPieces[0].previousPositionKind = "outer";
+      myPieces[0].previousPositionIndex = 20;
 
       turnClient.send("throwStart", {});
       await flush(DO_ELAPSED_MS);
@@ -1001,12 +1004,13 @@ describe("MatchRoom", () => {
       turnClient.send("movePiece", { pieceId: myPieces[0].id, resultId });
       await flush();
 
-      expect(myPieces[0].positionKind).toBe("start");
+      expect(myPieces[0].positionKind).toBe("outer");
+      expect(myPieces[0].positionIndex).toBe(20);
       expect(room.state.pendingResults.length).toBe(0);
       expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(currentTurnSessionId);
     });
 
-    it("시간초과 시, 판 위에 있는 말이 배열상 나중 순번이어도 그 말을 우선 골라 시작점으로 돌려보낸다", async () => {
+    it("시간초과 시, 판 위에 있는 말이 배열상 나중 순번이어도 그 말을 우선 골라 도착점으로 돌려보낸다", async () => {
       const { room, clients } = await setupFourPlayers(colyseus, { rng: sequence(0.3, 0.1), moveTimeoutMs: 100 });
       const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
       const turnClient = clients.find((c) => c.sessionId === currentTurnSessionId)!;
@@ -1015,8 +1019,8 @@ describe("MatchRoom", () => {
       // 여전히 시작점에 있는 첫 번째 말이 먼저 골라져 빽도가 아무 효과 없이 낭비됐다.
       myPieces[1].positionKind = "outer";
       myPieces[1].positionIndex = 1;
-      myPieces[1].previousPositionKind = "start";
-      myPieces[1].previousPositionIndex = -1;
+      myPieces[1].previousPositionKind = "outer";
+      myPieces[1].previousPositionIndex = 20;
 
       turnClient.send("throwStart", {});
       await flush(DO_ELAPSED_MS);
@@ -1028,7 +1032,8 @@ describe("MatchRoom", () => {
       await flush(300);
 
       expect(myPieces[0].positionKind).toBe("start"); // 원래부터 시작점, 영향 없음
-      expect(myPieces[1].positionKind).toBe("start"); // 판 위에 있던 말이 실제로 되돌아가야 함
+      expect(myPieces[1].positionKind).toBe("outer"); // 판 위에 있던 말이 도착점으로 돌아가야 함
+      expect(myPieces[1].positionIndex).toBe(20);
       expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(currentTurnSessionId);
     });
   });

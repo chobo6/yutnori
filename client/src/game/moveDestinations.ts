@@ -35,10 +35,12 @@ export function computeMoveDestinations(
 
     if (steps < 0) {
       // 빽도 — previousPosition으로 직행, 지름길 개념 없음. previousPosition이 "start"인
-      // 경우(첫 줄 "도" 자리에서 온 말 — 시작 후 첫 이동은 previousPosition이 항상 start다)는
-      // positionToCoords가 null을 줘서(시작점은 보드 좌표가 없음) 그냥 건너뛰면 목적지 점이
-      // 아예 안 뜬다 — "완주"와 똑같은 이유로 시작/도착 모서리(CORNERS[0])에 점을 띄운다
-      // (2026-08-30 발견: 이 경우 목적지가 없어 플레이어가 확정할 방법이 없었다).
+      // 경우(대기 중이던 말 자체가 빽도를 맞은, 사실상 no-op인 경우 — 판 위에 있는 말은
+      // 대기 상태 대신 도착점(외곽 20번)을 previousPosition으로 갖도록 서버가 이미 보정해준다,
+      // 2026-08-30 수정, server/src/game/pieces.ts 참고)는 positionToCoords가 null을 줘서
+      // (시작점은 보드 좌표가 없음) 그냥 건너뛰면 목적지 점이 아예 안 뜬다 — "완주"와 똑같은
+      // 이유로 시작/도착 모서리(CORNERS[0])에 점을 띄운다(2026-08-30 발견: 이 경우 목적지가
+      // 없어 플레이어가 확정할 방법이 없었다).
       const coords =
         piece.previousPositionKind === "start"
           ? CORNERS[0]

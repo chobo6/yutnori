@@ -569,6 +569,20 @@ export class MatchRoom extends Room<MatchState> {
   /** 실제 movePiece와 시간초과 자동 말 선택이 공유하는 "이동 실행" 로직. */
   private performMove(sessionId: string, pieceId: string, resultId: string, useShortcut: boolean) {
     if (!this.isCurrentTurn(sessionId) || this.state.gaugePhase !== "resolved") return;
+
+    // 교주 보너스는 "발동한 시점"에만 유효한 일회성 기회다(REQUIREMENTS.md §3.1) — 제한시간이
+    // 남아있어도, 다른 패를 먼저 쓰기로 한 결정 자체가 곧 그 기회가 지나갔다는 뜻이다. 지금
+    // 쓰려는 패(resultId)가 그 보너스 자신이 아니라면, 아직 안 쓰고 남아있는 교주 보너스를
+    // 이번 이동을 적용하기 전에 먼저 버린다(2026-08-30 — 시간초과로만 사라지는 게 아니라, 몇
+    // 초가 남았든 다른 패를 먼저 쓰는 순간 바로 사라져야 한다. 시간초과 자체로 사라지는
+    // 경우는 아래 autoMove의 별도 분기가 처리한다).
+    for (let i = this.state.pendingResults.length - 1; i >= 0; i--) {
+      const stale = this.state.pendingResults[i];
+      if (stale.result === GYOJU_BONUS_RESULT && stale.id !== resultId) {
+        this.state.pendingResults.splice(i, 1);
+      }
+    }
+
     const pendingIndex = this.state.pendingResults.findIndex((p) => p.id === resultId);
     if (pendingIndex === -1) return;
     const pending = this.state.pendingResults[pendingIndex];

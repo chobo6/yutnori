@@ -31,6 +31,41 @@ describe("applyMove", () => {
     expect(result[0].previousPosition).toEqual({ kind: "outer", index: 4 });
   });
 
+  it("대기 상태에서 '도'(1칸)로 막 나온 말의 previousPosition은 대기 상태가 아니라 도착점(외곽 20번)이다(2026-08-30 버그 수정)", () => {
+    // 보드는 시작점과 도착점이 물리적으로 같은 모서리를 도는 순환 트랙이다(position.ts의
+    // LAST_OUTER_INDEX 주석 참고) — "도" 한 칸 전은 대기 상태(아직 판에 놓이지 않음)가
+    // 아니라 그 도착점 칸이어야, 나중에 빽도를 맞았을 때 도착점에 있던 다른 말과 정상적으로
+    // 잡기/업기 상호작용을 할 수 있다. 예전엔 이 경우 previousPosition을 그대로 start로 둬서,
+    // 도착점에 있던 상대 말과 아무 상호작용도 없이 그냥 대기 상태로 사라져버리는 버그가 있었다.
+    const pieces: Piece[] = [
+      { id: "p1", ownerId: "alice", teamId: "A", character: "교주", position: { kind: "start" }, previousPosition: { kind: "start" } },
+    ];
+    const { pieces: result } = applyMove(pieces, "p1", 1, false);
+    const p1 = result.find((p) => p.id === "p1")!;
+    expect(p1.position).toEqual({ kind: "outer", index: 1 });
+    expect(p1.previousPosition).toEqual({ kind: "outer", index: 20 });
+  });
+
+  it("'도' 자리에서 빽도를 맞으면 대기 상태가 아니라 도착점(외곽 20번)으로 돌아가고, 거기 있던 상대 말을 정상적으로 잡는다(2026-08-30 버그 수정)", () => {
+    const pieces: Piece[] = [
+      {
+        id: "p1",
+        ownerId: "alice",
+        teamId: "A",
+        character: "교주",
+        position: { kind: "outer", index: 1 },
+        previousPosition: { kind: "outer", index: 20 }, // 위 테스트에서 확인한 정상 값
+      },
+      piece("enemy1", "bob", 20),
+    ];
+    const { pieces: result, capturedPieceIds } = applyMove(pieces, "p1", -1, false);
+    const p1 = result.find((p) => p.id === "p1")!;
+    const enemy = result.find((p) => p.id === "enemy1")!;
+    expect(p1.position).toEqual({ kind: "outer", index: 20 });
+    expect(enemy.position).toEqual({ kind: "start" }); // 잡힘
+    expect(capturedPieceIds).toEqual(["enemy1"]);
+  });
+
   it("2칸 이동 후 빽도를 맞으면 그 이동 전체(2칸)가 아니라 정확히 1칸만 되돌아간다(2026-08-28 버그 수정)", () => {
     const afterAdvance = applyMove([piece("p1", "alice", 3)], "p1", 2, false).pieces; // 3 -> 5
     expect(afterAdvance[0].position).toEqual({ kind: "outer", index: 5 });

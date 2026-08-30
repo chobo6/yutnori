@@ -717,6 +717,69 @@ describe("MatchRoom 캐릭터 능력 통합", () => {
     expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(sessionId); // 턴이 다음 사람에게 넘어감
   });
 
+  it("교주 보너스 대기 패가 쌓인 상태에서 다른 대기 패를 먼저 쓰면, 제한시간이 남아있어도 곧바로 사라진다(2026-08-30)", async () => {
+    // "발동한 시점에만 유효한 일회성 기회"는 시간과 무관하다 — 시간이 남아있어도 플레이어가
+    // 다른 패를 먼저 쓰기로 한 순간 이미 그 기회는 지나간 것이다. moveTimeoutMs를 넉넉히 줘서
+    // 시간초과가 아니라 "다른 패를 먼저 씀" 자체가 소멸 원인임을 분명히 한다.
+    // 1v1 모드를 써서 같은 플레이어가 4개의 말(교주/성직/마담/의사)을 전부 갖게 한다 — 두
+    // 번째 이동에 쓸 말(의사)이 교주와 전혀 업혀있지 않은 완전히 별개의 말이어야, 그 이동
+    // 자체가 새로운 교주 보너스를 또 만들어내는 혼선 없이 "먼저 쓰지 않은 보너스가 사라지는지"만
+    // 순수하게 검증할 수 있다.
+    const room = await colyseus.createRoom<MatchState>("match", { rng: () => 0, moveTimeoutMs: 5000, mode: "1v1" });
+    const clientA = await connectAsUser(colyseus, room, "교주보너스순서A");
+    const clientB = await connectAsUser(colyseus, room, "교주보너스순서B");
+    clientA.send("pickTeam", { team: "A" });
+    clientA.send("pickCharacters", { characters: ["교주", "성직", "마담", "의사"] });
+    clientB.send("pickTeam", { team: "B" });
+    clientB.send("pickCharacters", { characters: ["의사", "의사", "마담", "마담"] });
+    await flush();
+    clientA.send("ready", {});
+    clientB.send("ready", {});
+    await flush();
+
+    const sessionId = room.state.turnOrder[room.state.currentTurnIndex];
+    const moverClient = [clientA, clientB].find((c) => c.sessionId === sessionId)!;
+    const gyojuId = `${sessionId}-0`; // 교주
+    const seongjikId = `${sessionId}-1`; // 성직 — 교주와 업혀서 보너스를 발동시킬 말
+    const uisaId = `${sessionId}-3`; // 의사 — 교주와 전혀 무관한, 두 번째 이동에 쓸 말
+    placeAt(room, gyojuId, 5);
+    placeAt(room, seongjikId, 5); // 업기 발생 -> 모(5칸)로 도착 칸이 정확히 10번(지름길 모서리)
+    placeAt(room, uisaId, 2); // 교주 그룹과 완전히 별개인 위치
+
+    // 모(5칸, 윷/모라 체인) -> 개(2칸, 체인이 끝나 이동 가능) 순으로 던져 대기 패 2개를 쌓는다.
+    moverClient.send("throwStart", {});
+    await flush(MO_TIMING_MS);
+    moverClient.send("throwRelease", {});
+    await flush();
+    moverClient.send("throwStart", {});
+    await flush(120); // "개" 구간
+    moverClient.send("throwRelease", {});
+    await flush();
+    expect(room.state.pendingResults.length).toBe(2);
+    const moPending = room.state.pendingResults[0];
+    const gaePending = room.state.pendingResults[1];
+
+    // 먼저 "모" 패로 교주+성직을 함께 10번(모서리)까지 이동시켜 교주 보너스를 발동시킨다.
+    moverClient.send("movePiece", { pieceId: gyojuId, resultId: moPending.id });
+    await flush();
+
+    expect(room.state.pendingResults.length).toBe(2); // 개 패 + 교주 보너스 대기 패
+    const bonusPending = room.state.pendingResults.find((p) => p.result === "gyojuBonus")!;
+    expect(bonusPending).toBeDefined();
+
+    // 교주 보너스를 쓰지 않고, 대신 남아있던 "개" 패를 교주와 무관한 의사 말에 먼저 쓴다.
+    moverClient.send("movePiece", { pieceId: uisaId, resultId: gaePending.id });
+    await flush();
+
+    const uisa = room.state.pieces.find((p) => p.id === uisaId)!;
+    expect(uisa.positionIndex).toBe(4); // 2 + 2(개) — 교주와 무관하니 보너스 판정 자체가 없음
+    // 아직 이동 선택 제한시간(5000ms)이 한참 남아있는데도, 다른 패를 먼저 썼으므로 교주
+    // 보너스는 이미 사라져 있어야 한다.
+    expect(room.state.pendingResults.some((p) => p.result === "gyojuBonus")).toBe(false);
+    expect(room.state.pendingResults.length).toBe(0);
+    expect(room.state.turnOrder[room.state.currentTurnIndex]).not.toBe(sessionId); // 턴도 넘어감
+  });
+
   it("교주 보너스 대기 패에서 지름길을 안 쓰면(useShortcut:false) 그냥 바깥길로 1칸 간다", async () => {
     const { room, clients } = await setupTeams(
       colyseus,
