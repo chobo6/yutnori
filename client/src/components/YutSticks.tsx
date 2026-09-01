@@ -19,25 +19,29 @@ const MARKED_STROKE = "#c0392b";
 const MARK_COLOR = "#f5e6c8";
 
 /**
- * 전통 윷놀이 물리 규칙: 앞면(X 표시가 있는 면)이 위로 온 가락 개수로 결과가 정해진다
- * (0개=모, 1개=도/빽도, 2개=개, 3개=걸, 4개=윷). 빽도는 "표식 있는 가락(index 0)"이
- * 앞면을 보일 때만 성립 — 나머지 3개 중 하나가 앞면이면 그냥 도.
+ * 전통 윷놀이 물리 규칙: 뒷면(X 표시가 없는 면 — 실제로 세는 면)이 위로 온 가락 개수로
+ * 결과가 정해진다(0개=모, 1개=도/빽도, 2개=개, 3개=걸, 4개=윷, 2026-08-31 정정 — 이전엔
+ * 반대로 앞면 개수를 세는 걸로 잘못 구현되어 있었다. 예: 걸은 뒷면 3개 + 앞면 1개여야
+ * 하는데 예전 코드는 앞면 3개를 그렸다). 빽도는 "표식 있는 가락(index 0)"이 뒷면을
+ * 보일 때만 성립 — 나머지 3개 중 하나가 뒷면이면 그냥 도.
  * 반환값의 각 원소는 그 인덱스 가락이 "앞면이 위"인지 여부.
  */
 function targetFaces(result: string): boolean[] {
   switch (result) {
     case "mo":
-      return [false, false, false, false];
+      return [true, true, true, true]; // 뒷면 0개
     case "do":
-      return [false, true, false, false];
+      // 뒷면 1개 — 표식 없는 가락(index 1)이 뒷면이어야 빽도와 구분된다.
+      return [true, false, true, true];
     case "backDo":
-      return [true, false, false, false];
+      // 뒷면 1개 — 표식 있는 가락(index 0)이 뒷면이어야 성립한다.
+      return [false, true, true, true];
     case "gae":
-      return [true, true, false, false];
+      return [true, true, false, false]; // 뒷면 2개(대칭이라 이전과 동일)
     case "geol":
-      return [true, true, true, false];
+      return [true, false, false, false]; // 뒷면 3개
     case "yut":
-      return [true, true, true, true];
+      return [false, false, false, false]; // 뒷면 4개
     default:
       return [false, false, false, false];
   }
