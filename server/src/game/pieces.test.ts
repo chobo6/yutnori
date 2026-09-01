@@ -135,14 +135,15 @@ describe("applyMove", () => {
     expect(capturedPieceIds).toEqual([]);
   });
 
-  it("같은 팀 동료의 말은 업기 대상이 아니라 함께 이동하지 않는다", () => {
-    // 업기는 "자신의 말 2개끼리"만 성립한다 (REQUIREMENTS.md §6).
+  it("같은 팀 동료(주인은 다름)의 말도 업기 대상이라 함께 이동한다(2026-09-02 변경 — 이전엔 자신의 말끼리만 업혔다)", () => {
+    // 업기는 이제 "같은 팀 말끼리" 성립한다 (REQUIREMENTS.md §6).
     const pieces = [piece("p1", "alice", 5), piece("mate1", "amy", 5)];
-    const { pieces: result } = applyMove(pieces, "p1", 2, false); // p1: 5->7
+    const { pieces: result, piggybackedIds } = applyMove(pieces, "p1", 2, false); // p1: 5->7
     const p1 = result.find((p) => p.id === "p1")!;
     const mate = result.find((p) => p.id === "mate1")!;
     expect(p1.position).toEqual({ kind: "outer", index: 7 });
-    expect(mate.position).toEqual({ kind: "outer", index: 5 }); // 동료 말은 그대로
+    expect(mate.position).toEqual({ kind: "outer", index: 7 }); // 팀 동료도 같이 이동
+    expect(piggybackedIds).toEqual(["mate1"]);
   });
 
   it("도착 칸에 아군(내 말·동료 말)과 상대 팀 말이 섞여 있으면 상대 팀 말만 잡힌다", () => {

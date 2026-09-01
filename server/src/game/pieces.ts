@@ -5,7 +5,7 @@ export type PieceId = string;
 export interface Piece {
   id: PieceId;
   ownerId: string;
-  /** 소속 팀 ("A" | "B"). 잡기는 팀 기준, 업기는 주인 기준으로 판정한다 (REQUIREMENTS.md §6). */
+  /** 소속 팀 ("A" | "B"). 잡기와 업기 모두 팀 기준으로 판정한다 (REQUIREMENTS.md §6, 2026-09-02 변경 — 이전엔 업기만 주인 기준이었다). */
   teamId: string;
   /** 이 말에 고정 배정된 캐릭터("교주"|"성직"|"마담"|"의사") — 능력 판정은 abilities.ts 참고. */
   character: string;
@@ -16,7 +16,7 @@ export interface Piece {
 export interface MoveResult {
   pieces: Piece[];
   capturedPieceIds: PieceId[];
-  /** 이번 이동으로 함께 움직인(업힌) 같은 주인의 다른 말 id들. 교주 능력 판정에 쓰인다(abilities.ts). */
+  /** 이번 이동으로 함께 움직인(업힌) 같은 팀의 다른 말 id들. 교주 능력 판정에 쓰인다(abilities.ts). */
   piggybackedIds: PieceId[];
 }
 
@@ -68,10 +68,10 @@ export function applyMove(
         ? ({ kind: "outer", index: LAST_OUTER_INDEX } as const)
         : fromPosition;
 
-  // 같은 칸에 있던 같은 주인의 다른 말 (업기 대상)
+  // 같은 칸에 있던 같은 팀의 다른 말 (업기 대상, 2026-09-02 변경 — 이전엔 같은 주인 기준이었다)
   const piggybackIds = new Set(
     pieces
-      .filter((p) => p.id !== pieceId && p.ownerId === mover.ownerId && samePosition(p.position, fromPosition))
+      .filter((p) => p.id !== pieceId && p.teamId === mover.teamId && samePosition(p.position, fromPosition))
       .map((p) => p.id),
   );
 

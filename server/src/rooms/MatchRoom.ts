@@ -638,18 +638,20 @@ export class MatchRoom extends Room<MatchState> {
     // 기준이라 applyMove가 반환한 piggybackedIds("출발 칸" 기준, 함께 움직인 말들만)만으로는
     // 부족하다. 이동이 끝난 뒤(afterMove) 실제로 이동한 말과 같은 칸에 있는 모든 아군 말을
     // 다시 계산해 "출발 칸부터 같이 왔던 말"과 "도착 칸에 이미 있던 말" 둘 다 그룹에 넣는다 —
-    // 성공 시 이 그룹 전원이 함께 전진한다. 다만 "발동 여부" 판정은 이 그룹 전체가 아니라
-    // 이번 이동으로 실제로 움직인 쪽(mover + 출발 칸 기준 piggybackedIds)만 본다(2026-08-30) —
-    // 가만히 있던 교주 위로 다른 말이 이동해와 업힌 경우까지 발동시키면 안 되기 때문이다
-    // (server/src/game/abilities.ts의 applyGyojuBonus 문서 참고). result가 이미 교주 보너스
-    // 자체(GYOJU_BONUS_RESULT)라면 이 블록 전체를 건너뛴다 — 보너스 전진이 또 다른 보너스
-    // 발동을 만들지 않는다는 스펙(§3.1 "연쇄 방지")을 지키는 가드다.
+    // 성공 시 이 그룹 전원이 함께 전진한다. teamId 기준으로 판정한다(2026-09-02 변경 — 이전엔
+    // ownerId 기준이었는데, 업기 자체가 팀 기준으로 바뀌면서(pieces.ts) 도착 칸에 이미 있던
+    // 팀 동료 말도 같은 논리로 함께 전진해야 앞뒤가 맞는다). 다만 "발동 여부" 판정은 이 그룹
+    // 전체가 아니라 이번 이동으로 실제로 움직인 쪽(mover + 출발 칸 기준 piggybackedIds)만
+    // 본다(2026-08-30) — 가만히 있던 교주 위로 다른 말이 이동해와 업힌 경우까지 발동시키면
+    // 안 되기 때문이다(server/src/game/abilities.ts의 applyGyojuBonus 문서 참고). result가
+    // 이미 교주 보너스 자체(GYOJU_BONUS_RESULT)라면 이 블록 전체를 건너뛴다 — 보너스 전진이
+    // 또 다른 보너스 발동을 만들지 않는다는 스펙(§3.1 "연쇄 방지")을 지키는 가드다.
     let piecesAfterBonus = afterMove;
     let bonusCaptureRecords: CaptureRecord[] = [];
     if (result !== GYOJU_BONUS_RESULT) {
       const groupAfterMove = afterMove
         .filter(
-          (p) => p.id !== pieceId && p.ownerId === moverAfterMove.ownerId && samePosition(p.position, moverAfterMove.position),
+          (p) => p.id !== pieceId && p.teamId === moverAfterMove.teamId && samePosition(p.position, moverAfterMove.position),
         )
         .map((p) => p.id);
       const bonus = applyGyojuBonus(afterMove, pieceId, groupAfterMove, piggybackedIds, this.rng);
