@@ -37,6 +37,14 @@ const RECONNECTION_GRACE_SECONDS = 20;
 const MAX_CHAT_LENGTH = 200;
 /** 턴당 부여 가능한 추가 던지기 총량(윷/모 + 잡기 보너스 합산) — 첫 던지기 포함 최대 3회. */
 const MAX_EXTRA_THROWS = 2;
+/** 윷/모로 연속 던지기가 걸리면 client/src/components/GameBoard.tsx의 CHAIN_ANIM_MS(1500ms)
+ * 동안 클라이언트가 결과 연출을 보여주며 다음 던지기 입력을 막는다 — 그런데 그 연출이 도는
+ * 동안에도 서버의 던지기 제한시간(§4.1)은 이미 흐르고 있어서, 손대지 않으면 실제로 누를 수
+ * 있는 시간이 표시된 10초보다 1.5초 짧아진다("가끔씩 윷/모 직후에 던지지도 못하고 넘어간다"는
+ * 체감 신고, 2026-09-03 발견). 연속 던지기를 다시 걸 때만 이 만큼을 제한시간에 더해줘서, 화면에
+ * 뜨는 남은 시간이 실제로 누를 수 있는 시간과 일치하게 한다 — GameBoard.tsx의 CHAIN_ANIM_MS를
+ * 바꾸면 이 값도 반드시 같이 맞출 것. */
+const CHAIN_ANIM_BUFFER_MS = 1500;
 /** 실제 플레이어 자리 수(2v2=4, 1v1=2)와 무관하게 넉넉히 잡아두는 Colyseus maxClients — 진짜
  * 자리 제한은 playerCapacity로 직접 관리한다(관전자가 이 한도에 걸리면 안 되므로). */
 const MAX_CLIENTS_WITH_SPECTATORS = 1000;
@@ -496,7 +504,7 @@ export class MatchRoom extends Room<MatchState> {
     if (this.throwsOwed > 0) {
       this.throwsOwed--;
       this.state.gaugePhase = "idle";
-      this.armThrowTimeout(sessionId);
+      this.armThrowTimeout(sessionId, CHAIN_ANIM_BUFFER_MS);
       return;
     }
 
@@ -518,14 +526,20 @@ export class MatchRoom extends Room<MatchState> {
     this.armMoveTimeout(sessionId);
   }
 
-  /** 던지기 제한시간(REQUIREMENTS.md §4.1) — 안 누르거나, 누르고 안 뗀 경우 둘 다 이 타이머로 처리된다. */
-  private armThrowTimeout(sessionId: string) {
+  /**
+   * 던지기 제한시간(REQUIREMENTS.md §4.1) — 안 누르거나, 누르고 안 뗀 경우 둘 다 이 타이머로
+   * 처리된다. `extraMs`는 연속 던지기(윷/모, 잡기 보너스)를 다시 걸 때만 CHAIN_ANIM_BUFFER_MS를
+   * 넘겨받는다 — 클라이언트가 그만큼 결과 연출을 보여주며 입력을 막기 때문에, 이 만큼 더 주지
+   * 않으면 화면에 뜨는 "남은 시간"보다 실제로 누를 수 있는 시간이 짧아진다.
+   */
+  private armThrowTimeout(sessionId: string, extraMs = 0) {
     const token = ++this.turnToken;
-    this.state.turnDeadlineAt = Date.now() + this.throwTimeoutMs;
+    const timeoutMs = this.throwTimeoutMs + extraMs;
+    this.state.turnDeadlineAt = Date.now() + timeoutMs;
     this.clock.setTimeout(() => {
       if (token !== this.turnToken) return; // 이미 다른 행동으로 앞서 나간 오래된 타이머
       this.autoThrow(sessionId);
-    }, this.throwTimeoutMs);
+    }, timeoutMs);
   }
 
   /** 말 선택 제한시간(REQUIREMENTS.md §4.1) — 던지기가 끝난 시점부터 새로 카운트. */
@@ -750,7 +764,7 @@ export class MatchRoom extends Room<MatchState> {
     if (this.throwsOwed > 0) {
       this.throwsOwed--;
       this.state.gaugePhase = "idle";
-      this.armThrowTimeout(sessionId);
+      this.armThrowTimeout(sessionId, CHAIN_ANIM_BUFFER_MS);
       return;
     }
 

@@ -583,6 +583,35 @@ describe("MatchRoom", () => {
     expect(room.state.gaugePhase).toBe("resolved");
   });
 
+  it("윷/모로 연속 던지기가 걸리면 클라이언트 결과 연출(1.5초) 만큼 던지기 제한시간을 더 준다(2026-09-03 — 안 그러면 화면엔 10초가 남았다고 뜨는데 실제로 누를 수 있는 시간은 8.5초뿐이었다)", async () => {
+    const { room, clients } = await setupFourPlayers(colyseus);
+    const turnClient = clients.find((c) => c.sessionId === room.state.turnOrder[room.state.currentTurnIndex])!;
+
+    turnClient.send("throwStart", {});
+    await flush(YUT_ELAPSED_MS);
+    turnClient.send("throwRelease", {});
+    await flush();
+    const after = Date.now(); // armThrowTimeout 호출 직후 시점 — throwRelease 이후에 재야 한다
+
+    expect(room.state.pendingResults[0].result).toBe("yut"); // 연속 던지기 전제 확인
+    expect(room.state.gaugePhase).toBe("idle");
+
+    // 기본 던지기 제한시간(10000ms) + 연출 버퍼(1500ms)만큼 남아있어야 한다 — 테스트 실행 자체의
+    // 오차를 감안해 넉넉히 허용한다.
+    const deadlineFromNow = room.state.turnDeadlineAt - after;
+    expect(deadlineFromNow).toBeGreaterThan(11000);
+    expect(deadlineFromNow).toBeLessThan(11500);
+  });
+
+  it("턴이 시작될 때(연속 던지기가 아닌 첫 던지기)는 연출 버퍼 없이 기본 제한시간만 준다", async () => {
+    const { room } = await setupFourPlayers(colyseus, { throwTimeoutMs: 5000, moveTimeoutMs: 5000 });
+
+    const before = Date.now();
+    const deadlineFromNow = room.state.turnDeadlineAt - before;
+    expect(deadlineFromNow).toBeGreaterThan(4850);
+    expect(deadlineFromNow).toBeLessThan(5050);
+  });
+
   it("쌓인 패 중 원하는 것을 골라 순서와 무관하게 이동할 수 있다", async () => {
     const { room, clients } = await setupFourPlayers(colyseus);
     const currentTurnSessionId = room.state.turnOrder[room.state.currentTurnIndex];
