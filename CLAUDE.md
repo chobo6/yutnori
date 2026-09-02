@@ -57,6 +57,11 @@ npm run build  # tsc -b && vite build
   두 개로 같은 방에 동시에 플레이어로 들어오는 것도 `MatchRoom.ts`의 `playerUserIds`(sessionId ->
   userId 맵)로 막는다 — 두 번째 시도는 "이미 이 방에 참가 중인 계정입니다."로 거부된다(관전자는
   이 체크 대상이 아님). 설계: `docs/superpowers/specs/2026-08-29-google-login-admin-design.md`.
+  **유저 목록 닉네임 검색(2026-09-03~)**: `/api/admin/users?q=`가 `LIKE` 검색으로 서버에서
+  필터링한다 — songpyeon은 유저를 전부 불러온 뒤 클라이언트에서 필터링하지만, yutnori는 원래부터
+  `offset`/`limit` 서버 페이지네이션 구조였기 때문에 검색도 같은 서버 쿼리에 조건만 추가하는 쪽으로
+  포팅했다(`googleAuth.ts`의 `listUsers`). 새로 songpyeon 기능을 이식할 때 이미 존재하는 yutnori
+  쪽 구조(페이지네이션 방식 등)가 다르면 songpyeon 구현을 그대로 베끼지 말고 그 구조에 맞출 것.
 
 ## 보드 좌표계 — 지름길 모델(2026-08-22 재설계)
 
@@ -143,7 +148,7 @@ docker run -d --name yutnori --network yutnori-net --restart unless-stopped \
 
 ## Key docs
 
-- `docs/REQUIREMENTS.md` (v0.5) — 게임 규칙 명세. 1차 소스는 사용자의 직접 설명 + 참고 영상(마피아42 실제 인게임 화면) 확인 결과.
+- `docs/REQUIREMENTS.md` — 게임 규칙 명세(파일 첫 줄에 최신 버전 번호 표기). 1차 소스는 사용자의 직접 설명 + 참고 영상(마피아42 실제 인게임 화면) 확인 결과.
 - `docs/ARCHITECTURE.md` — 기술 스택 선택 이유, Colyseus 개념 매핑, 게이지 서버 시간 판정 설계.
 - `docs/TROUBLESHOOTING.md` — 실제 발생한 버그의 근본 원인 기록 (위 Gotchas는 요약본, 재현/진단 과정은 원문 참고).
 - `docs/superpowers/plans/` — 과거 구현 계획 문서(핵심 게임 엔진, 대기실+기본 플레이 화면). 완료된 기능의 설계 배경을 알고 싶을 때 참고.

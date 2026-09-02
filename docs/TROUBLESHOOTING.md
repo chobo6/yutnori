@@ -101,7 +101,7 @@ function samePosition(a: Position, b: Position): boolean {
 
 ### 해결
 
-`Piece`에 `teamId: string` 필드 추가, `MatchRoom.ts`가 `PieceSchema` → `Piece` 변환 시 `players.get(ownerSessionId).team`을 조회해 채움. 잡기 판정을 `p.teamId !== mover.teamId`로 변경(업기 판정은 기존대로 `ownerId` 기준 유지 — REQUIREMENTS.md §6이 업기는 "자신의 말 2개끼리"로 명시).
+`Piece`에 `teamId: string` 필드 추가, `MatchRoom.ts`가 `PieceSchema` → `Piece` 변환 시 `players.get(ownerSessionId).team`을 조회해 채움. 잡기 판정을 `p.teamId !== mover.teamId`로 변경(당시 업기 판정은 `ownerId` 기준으로 유지 — REQUIREMENTS.md §6이 업기를 "자신의 말 2개끼리"로 명시하고 있었음. **이후 2026-09-02에 업기도 `teamId` 기준으로 바뀌었다** — REQUIREMENTS.md §6 v0.38, CLAUDE.md 참고. 이 문단은 당시 기록 그대로 남겨둔다).
 
 ### 관련 파일
 - `server/src/game/pieces.ts`

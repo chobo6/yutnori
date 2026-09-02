@@ -163,7 +163,7 @@ songpyeon과 동일하게 이식:
 | `GET /api/admin/events/search?nickname=` | 닉네임 부분일치로 과거 접속기록 검색(최대 200건) |
 | `GET /api/admin/chat-logs` | 최근 채팅 로그 최대 200건 |
 | `GET /api/admin/stats/daily-visitors` | 오늘 방문자 수 + 최근 7일 |
-| `GET /api/admin/users?offset=&limit=` | 유저 목록(페이지네이션) |
+| `GET /api/admin/users?offset=&limit=&q=` | 유저 목록(페이지네이션 + 닉네임 부분일치 검색, `q`는 2026-09-03 추가) |
 | `POST /api/admin/users/:id/ban` | 밴/해제 토글 |
 | `POST /api/admin/users/:id/nickname` | 관리자 닉네임 강제 변경(`adminSetNickname`) |
 | `GET /api/admin/users/:id/ips` | 계정별 IP 이력 |
@@ -176,7 +176,7 @@ songpyeon과 동일하게 이식:
 - `AdminPage.tsx` — 로그인 여부 + 뷰 전환(대시보드/유저관리/문의함), 라우터 없이 `useState`로 분기.
 - `AdminLogin.tsx` — 비밀번호 입력 폼.
 - `AdminDashboard.tsx` — 활성 방/인원, 최근 입장·퇴장, 최근 채팅 로그, 닉네임 검색, 오늘 방문자 수, 공지 배너 발송 폼.
-- `AdminUsers.tsx` — 유저 목록(페이지네이션) + 행마다 밴/해제 버튼 + "닉네임 수정" 버튼.
+- `AdminUsers.tsx` — 유저 목록(페이지네이션 + 닉네임 검색창, 2026-09-03 추가) + 행마다 밴/해제 버튼 + "닉네임 수정" 버튼.
 - `AdminEditNicknameModal.tsx` — 닉네임 입력 필드 하나짜리 간단한 모달(songpyeon의 `AdminEditUserModal`처럼 색/효과/게임머니까지 다 들어간 건 불필요 — 닉네임 하나만).
 - `AdminInquiries.tsx` — 문의 목록 열람.
 - 진입: `main.tsx`가 `window.location.pathname === "/admin"`으로 분기(라우터 라이브러리 안 씀, songpyeon과 동일).
