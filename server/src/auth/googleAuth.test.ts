@@ -75,4 +75,25 @@ describe("googleAuth", () => {
     expect(total).toBe(3);
     expect(rows).toHaveLength(2);
   });
+
+  it("listUsers는 닉네임 일부로 검색할 수 있다", () => {
+    const alice = getOrCreateUser("sub-alice", {});
+    const bob = getOrCreateUser("sub-bob", {});
+    getOrCreateUser("sub-carol", {});
+    setNickname(alice.id, "홍길동");
+    setNickname(bob.id, "홍판서");
+
+    const { rows, total } = listUsers(0, 20, "홍");
+    expect(total).toBe(2);
+    expect(rows.map((r) => r.nickname).sort()).toEqual(["홍길동", "홍판서"]);
+  });
+
+  it("listUsers는 검색어와 일치하는 닉네임이 없으면 빈 목록을 반환한다", () => {
+    const alice = getOrCreateUser("sub-alice", {});
+    setNickname(alice.id, "홍길동");
+
+    const { rows, total } = listUsers(0, 20, "존재안함");
+    expect(total).toBe(0);
+    expect(rows).toEqual([]);
+  });
 });

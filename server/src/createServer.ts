@@ -202,7 +202,8 @@ export function createGameServer() {
   app.get("/api/admin/users", requireAdmin, (req, res) => {
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const limit = Math.min(Math.max(1, Number(req.query.limit) || 20), 100);
-    res.json(listUsers(offset, limit));
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    res.json(listUsers(offset, limit, q));
   });
 
   app.post("/api/admin/users/:id/ban", requireAdmin, (req, res) => {

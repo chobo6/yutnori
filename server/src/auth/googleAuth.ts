@@ -106,13 +106,23 @@ export type AdminUserRow = {
   lastLoginAt: string | null;
 };
 
-export function listUsers(offset: number, limit: number): { rows: AdminUserRow[]; total: number } {
+export function listUsers(
+  offset: number,
+  limit: number,
+  nicknameQuery?: string,
+): { rows: AdminUserRow[]; total: number } {
+  const trimmed = nicknameQuery?.trim();
+  const where = trimmed ? `WHERE nickname LIKE ?` : ``;
+  const likeParam = trimmed ? [`%${trimmed}%`] : [];
+
   const rows = db
     .prepare(
       `SELECT id, email, name, nickname, banned_at AS bannedAt, created_at AS createdAt, last_login_at AS lastLoginAt
-       FROM users ORDER BY id DESC LIMIT ? OFFSET ?`,
+       FROM users ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
     )
-    .all(limit, offset) as AdminUserRow[];
-  const total = (db.prepare(`SELECT COUNT(*) AS c FROM users`).get() as { c: number }).c;
+    .all(...likeParam, limit, offset) as AdminUserRow[];
+  const total = (
+    db.prepare(`SELECT COUNT(*) AS c FROM users ${where}`).get(...likeParam) as { c: number }
+  ).c;
   return { rows, total };
 }
