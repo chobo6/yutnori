@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveBackward, moveForward, sameSide, sideOf, type Position } from "./position";
+import { moveBackward, moveForward, sameSide, sidesOf, type Position } from "./position";
 
 describe("moveForward", () => {
   it("출발 전 말이 도(1)를 던지면 외곽 1번 칸으로 이동한다", () => {
@@ -306,36 +306,49 @@ describe("moveBackward", () => {
   });
 });
 
-describe("sideOf", () => {
-  it("outer 1~5는 A", () => {
-    expect(sideOf({ kind: "outer", index: 1 })).toBe("A");
-    expect(sideOf({ kind: "outer", index: 5 })).toBe("A");
+describe("sidesOf", () => {
+  it("outer 1~4는 A만", () => {
+    expect(sidesOf({ kind: "outer", index: 1 })).toEqual(["A"]);
+    expect(sidesOf({ kind: "outer", index: 4 })).toEqual(["A"]);
   });
 
-  it("outer 6~10은 B", () => {
-    expect(sideOf({ kind: "outer", index: 6 })).toBe("B");
-    expect(sideOf({ kind: "outer", index: 10 })).toBe("B");
+  it("outer 6~9는 B만", () => {
+    expect(sidesOf({ kind: "outer", index: 6 })).toEqual(["B"]);
+    expect(sidesOf({ kind: "outer", index: 9 })).toEqual(["B"]);
   });
 
-  it("outer 11~15는 C", () => {
-    expect(sideOf({ kind: "outer", index: 11 })).toBe("C");
-    expect(sideOf({ kind: "outer", index: 15 })).toBe("C");
+  it("outer 11~14는 C만", () => {
+    expect(sidesOf({ kind: "outer", index: 11 })).toEqual(["C"]);
+    expect(sidesOf({ kind: "outer", index: 14 })).toEqual(["C"]);
   });
 
-  it("outer 16~20은 D(20번은 도착점, 2026-08-28부터 완주 전엔 평범한 outer 칸)", () => {
-    expect(sideOf({ kind: "outer", index: 16 })).toBe("D");
-    expect(sideOf({ kind: "outer", index: 20 })).toBe("D");
+  it("outer 16~19는 D만(20번은 도착점이지만 완주 전엔 평범한 outer 칸)", () => {
+    expect(sidesOf({ kind: "outer", index: 16 })).toEqual(["D"]);
+    expect(sidesOf({ kind: "outer", index: 19 })).toEqual(["D"]);
   });
 
-  it("start/center/finished는 어느 변에도 속하지 않는다", () => {
-    expect(sideOf({ kind: "start" })).toBeNull();
-    expect(sideOf({ kind: "center", exitVia: "finish" })).toBeNull();
-    expect(sideOf({ kind: "finished" })).toBeNull();
+  it("꼭짓점(5/10/15/20)은 인접한 두 변 + 그 꼭짓점을 지나는 대각선까지 3개 줄에 속한다(2026-09-04 확장)", () => {
+    expect(sidesOf({ kind: "outer", index: 5 })).toEqual(["A", "B", "diag5-15"]);
+    expect(sidesOf({ kind: "outer", index: 10 })).toEqual(["B", "C", "diag10-20"]);
+    expect(sidesOf({ kind: "outer", index: 15 })).toEqual(["C", "D", "diag5-15"]);
+    expect(sidesOf({ kind: "outer", index: 20 })).toEqual(["D", "A", "diag10-20"]); // 20은 시작점(A)과 물리적으로 같은 모서리
   });
 
-  it("지름길 중간칸(shortcutIn/shortcutOut)도 어느 변에도 속하지 않는다", () => {
-    expect(sideOf({ kind: "shortcutIn", junction: 5, step: 1 })).toBeNull();
-    expect(sideOf({ kind: "shortcutOut", step: 1 })).toBeNull();
+  it("중앙은 두 대각선 모두에 속한다(exitVia와 무관, 2026-09-04 확장)", () => {
+    expect(sidesOf({ kind: "center", exitVia: "finish" })).toEqual(["diag5-15", "diag10-20"]);
+    expect(sidesOf({ kind: "center", exitVia: "cross" })).toEqual(["diag5-15", "diag10-20"]);
+  });
+
+  it("지름길 중간칸은 물리적으로 놓인 대각선 하나에 속한다(2026-09-04 확장)", () => {
+    expect(sidesOf({ kind: "shortcutIn", junction: 5, step: 1 })).toEqual(["diag5-15"]);
+    expect(sidesOf({ kind: "shortcutIn", junction: 10, step: 2 })).toEqual(["diag10-20"]);
+    expect(sidesOf({ kind: "shortcutOut", step: 1 })).toEqual(["diag10-20"]);
+    expect(sidesOf({ kind: "shortcutCross", step: 2 })).toEqual(["diag5-15"]);
+  });
+
+  it("start/finished는 어느 줄에도 속하지 않는다", () => {
+    expect(sidesOf({ kind: "start" })).toEqual([]);
+    expect(sidesOf({ kind: "finished" })).toEqual([]);
   });
 });
 
@@ -344,13 +357,28 @@ describe("sameSide", () => {
     expect(sameSide({ kind: "outer", index: 2 }, { kind: "outer", index: 4 })).toBe(true);
   });
 
-  it("다른 변이면 false", () => {
-    expect(sameSide({ kind: "outer", index: 5 }, { kind: "outer", index: 6 })).toBe(false);
+  it("서로 인접하지 않은 변이면 false", () => {
+    expect(sameSide({ kind: "outer", index: 2 }, { kind: "outer", index: 12 })).toBe(false);
   });
 
-  it("둘 중 하나라도 변이 없으면(start/center/finished) false", () => {
+  it("꼭짓점을 사이에 두고 인접한 변끼리는 true(2026-09-04 확장 — 꼭짓점이 두 변에 걸쳐 있음)", () => {
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "outer", index: 6 })).toBe(true); // 5(A/B 꼭짓점)와 B
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "outer", index: 4 })).toBe(true); // 5와 A
+  });
+
+  it("꼭짓점과 그 대각선 위 칸은 true(2026-09-04 확장)", () => {
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "outer", index: 15 })).toBe(true); // 5↔15 대각선의 양 끝
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "center", exitVia: "cross" })).toBe(true);
+    expect(sameSide({ kind: "outer", index: 5 }, { kind: "shortcutIn", junction: 5, step: 1 })).toBe(true);
+    expect(sameSide({ kind: "outer", index: 10 }, { kind: "shortcutOut", step: 1 })).toBe(true);
+  });
+
+  it("변 중간 칸은 그 변과 무관한 대각선 위 칸과는 여전히 false", () => {
+    expect(sameSide({ kind: "outer", index: 7 }, { kind: "shortcutCross", step: 1 })).toBe(false); // B변 vs 5↔15 대각선
+  });
+
+  it("둘 중 하나라도 줄이 없으면(start/finished) false", () => {
     expect(sameSide({ kind: "start" }, { kind: "outer", index: 3 })).toBe(false);
-    expect(sameSide({ kind: "outer", index: 3 }, { kind: "center", exitVia: "finish" })).toBe(false);
     expect(sameSide({ kind: "finished" }, { kind: "start" })).toBe(false);
   });
 });

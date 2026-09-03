@@ -142,7 +142,7 @@ export function moveBackward(from: Position, previousPosition: Position): Positi
   return previousPosition;
 }
 
-export type Side = "A" | "B" | "C" | "D";
+export type Side = "A" | "B" | "C" | "D" | "diag5-15" | "diag10-20";
 
 const SIDE_RANGES: Array<{ side: Side; min: number; max: number }> = [
   { side: "A", min: 1, max: 5 },
@@ -152,18 +152,48 @@ const SIDE_RANGES: Array<{ side: Side; min: number; max: number }> = [
 ];
 
 /**
- * 보드를 4개의 "변"으로 나눈다(캐릭터 능력의 "같은 줄" 판정용). outer가 아닌 모든 위치
- * (start/center/finished/shortcutIn/shortcutOut/shortcutCross)는 어느 변에도 속하지 않는다.
- * 20번(도착점)은 기존 5/10/15번 모서리와 같은 맥락으로 그 변(D)에 포함시킨다 — 물리적으로
- * 도착점 칸이지만 완주 전까지는(2026-08-28 변경) 평범한 outer 칸과 동일하게 취급한다.
+ * 보드의 두 대각선은 마주보는 꼭짓점끼리 중앙을 지나 이어진다 — 5↔15(한 변씩 두 개 건너뛴
+ * 반대쪽), 10↔20(마찬가지로 반대쪽, 20은 시작점과 물리적으로 같은 모서리). 각 꼭짓점은 자신을
+ * 지나는 대각선 하나씩만 갖는다(2026-09-04 확정, "같은 줄" 판정 확장의 일부).
  */
-export function sideOf(position: Position): Side | null {
-  if (position.kind !== "outer") return null;
-  const range = SIDE_RANGES.find((r) => position.index >= r.min && position.index <= r.max);
-  return range?.side ?? null;
+const CORNER_SIDES: Partial<Record<number, Side[]>> = {
+  5: ["A", "B", "diag5-15"],
+  10: ["B", "C", "diag10-20"],
+  15: ["C", "D", "diag5-15"],
+  20: ["D", "A", "diag10-20"],
+};
+
+/**
+ * 한 칸이 속한 "줄" 전체를 반환한다(캐릭터 능력의 "같은 줄" 판정용, 2026-09-04 확장) — 한 칸이
+ * 여러 줄에 걸칠 수 있어 배열로 반환한다:
+ * - **꼭짓점**(outer 5/10/15/20)은 인접한 두 변 + 그 꼭짓점을 지나는 대각선, 총 3개 줄에
+ *   속한다(예: 5번은 A(1~5)·B(6~10)·5↔15 대각선 전부).
+ * - 그 외 outer 칸은 자신이 속한 변 하나뿐이다.
+ * - **중앙**(center)은 두 대각선(diag5-15, diag10-20) 모두에 속한다 — 어느 방향으로 나갈지
+ *   (`exitVia`)와 무관하게 늘 두 대각선의 교차점이다.
+ * - 지름길 진입/진출 중간 칸은 그 칸이 물리적으로 놓인 대각선 하나에 속한다 — 5번 진입
+ *   (`shortcutIn` junction 5)과 중앙→15번 구간(`shortcutCross`)은 5↔15 대각선, 10번 진입
+ *   (`shortcutIn` junction 10)과 중앙→도착점 구간(`shortcutOut`)은 10↔20 대각선이다.
+ * - `start`/`finished`는 어느 줄에도 속하지 않는다(빈 배열 — 판 밖이라 "같은 줄" 자체가
+ *   성립하지 않는다).
+ */
+export function sidesOf(position: Position): Side[] {
+  if (position.kind === "outer") {
+    const cornerSides = CORNER_SIDES[position.index];
+    if (cornerSides) return cornerSides;
+    const range = SIDE_RANGES.find((r) => position.index >= r.min && position.index <= r.max);
+    return range ? [range.side] : [];
+  }
+  if (position.kind === "center") return ["diag5-15", "diag10-20"];
+  if (position.kind === "shortcutIn") return [position.junction === 10 ? "diag10-20" : "diag5-15"];
+  if (position.kind === "shortcutOut") return ["diag10-20"];
+  if (position.kind === "shortcutCross") return ["diag5-15"];
+  return [];
 }
 
 export function sameSide(a: Position, b: Position): boolean {
-  const sideA = sideOf(a);
-  return sideA !== null && sideA === sideOf(b);
+  const sidesA = sidesOf(a);
+  if (sidesA.length === 0) return false;
+  const sidesB = sidesOf(b);
+  return sidesA.some((side) => sidesB.includes(side));
 }

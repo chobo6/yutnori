@@ -400,6 +400,49 @@ describe("resolveCaptureResponses", () => {
     expect(effects[0].blockedBy).toBe("enemy-madam");
   });
 
+  it("마담이 꼭짓점에 있으면 인접한 두 변 모두에서 성직을 저지할 수 있다(2026-09-04 확장)", () => {
+    // 마담이 10번 꼭짓점(B/C 변과 10↔20 대각선 모두에 걸침)에 있으면, C줄(11~15)에 있는
+    // 성직도 저지 대상이다 — 꼭짓점은 인접한 변 두 개 모두에 속하기 때문.
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("seongjik", "bob", "B", "성직", 12), // C줄
+      piece("enemy-madam", "alice", "A", "마담", 10), // B/C 변 + 10↔20 대각선 꼭짓점
+    ];
+    pieces[0].position = { kind: "start" };
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "start" }); // 저지되어 그대로 잡힘
+    expect(effects[0].blockedBy).toBe("enemy-madam");
+  });
+
+  it("마담이 꼭짓점에 있으면 그 꼭짓점을 지나는 대각선 위의 성직도 저지할 수 있다(2026-09-04 확장)", () => {
+    // 5↔15는 같은 대각선이다 — 마담이 5번 꼭짓점에 있으면, 그 대각선의 반대쪽 끝인 15번(C/D
+    // 변에 속하지 B/A와는 무관)에 있는 성직도 저지 대상이 된다.
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("seongjik", "bob", "B", "성직", 15), // C/D 변 + 5↔15 대각선 꼭짓점
+      piece("enemy-madam", "alice", "A", "마담", 5), // A/B 변 + 5↔15 대각선 꼭짓점 — victim(B줄)과도 다른 변
+    ];
+    pieces[0].position = { kind: "start" };
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "start" }); // 대각선 공유로 저지됨
+    expect(effects[0].blockedBy).toBe("enemy-madam");
+  });
+
+  it("마담이 중앙에 있으면 두 대각선 위의 성직 모두를 저지할 수 있다(2026-09-04 확장)", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("seongjik", "bob", "B", "성직", 15), // 5↔15 대각선
+      { ...piece("enemy-madam", "alice", "A", "마담", 0), position: { kind: "center" as const, exitVia: "finish" as const } },
+    ];
+    pieces[0].position = { kind: "start" };
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "start" }); // 중앙은 두 대각선 모두와 같은 줄이라 저지됨
+    expect(effects[0].blockedBy).toBe("enemy-madam");
+  });
+
   it("같은 팀에 의사가 2개 있으면 하나라도 성공할 때까지 순회한다", () => {
     const pieces = [
       piece("victim", "bob", "B", "마담", 0),
