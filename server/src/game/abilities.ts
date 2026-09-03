@@ -46,16 +46,23 @@ function onBoard(position: Position): boolean {
 }
 
 /**
- * eventPosition과 같은 줄에 있는 상대(abilityOwnerTeamId 기준 적팀)의 마담이 하나라도 저지에
+ * subjectPosition과 같은 줄에 있는 상대(abilityOwnerTeamId 기준 적팀)의 마담이 하나라도 저지에
  * 성공하면 그 마담의 pieceId를 반환(UI 알림용), 아니면 null. 마담이 여럿이면 각각 독립적으로
  * 판정하고, 하나라도 성공하면 즉시 저지된다.
+ *
+ * subjectPosition은 "능력을 발동하는 말 자신의 위치"다(2026-09-04 확정, 사용자 정정 — 이전엔
+ * 의사/성직 판정에서 이 자리에 잡힌 말의 잡히기 직전 위치를 넘겼다). 교주는 이동한 말 자신이
+ * 곧 능력의 주체라 도착 칸을 그대로 넘기면 되지만, 성직은 잡힌 말과 다른 줄에서도 발동할 수
+ * 있어서(의사와 달리 "같은 줄" 제약이 없음) 잡힘 사건 위치를 기준으로 비교하면 성직과 전혀
+ * 무관한 줄에 있는 마담이 저지해버리는 버그가 있었다 — 의사는 애초에 잡힌 말과 같은 줄에
+ * 있어야 후보가 되므로 이 변경으로 실질 동작이 안 바뀐다.
  */
-function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, eventPosition: Position, rng: Rng): PieceId | null {
+function isBlockedByMadam(pieces: Piece[], abilityOwnerTeamId: string, subjectPosition: Position, rng: Rng): PieceId | null {
   const enemyMadams = pieces.filter(
     (p) => p.character === "마담" && p.teamId !== "" && p.teamId !== abilityOwnerTeamId && onBoard(p.position),
   );
   for (const madam of enemyMadams) {
-    if (sameSide(madam.position, eventPosition) && roll(MADAM_BLOCK_CHANCE, rng)) {
+    if (sameSide(madam.position, subjectPosition) && roll(MADAM_BLOCK_CHANCE, rng)) {
       return madam.id;
     }
   }
@@ -175,7 +182,10 @@ function tryUisa(pieces: Piece[], group: CaptureRecord[], siblingCaptures: Captu
   });
   let blockedBy: PieceId | null = null;
   for (const uisa of candidates) {
-    const blocker = isBlockedByMadam(pieces, teamId, originalPosition, rng);
+    // 마담은 잡힌 말의 위치가 아니라 의사 자신의 위치와 같은 줄에 있어야 저지할 수 있다(위
+    // isBlockedByMadam 문서 참고) — non-null 단정은 candidates 필터에서 이미 확인했으므로 안전.
+    const uisaPosition = eligiblePosition(uisa, siblingCaptures)!;
+    const blocker = isBlockedByMadam(pieces, teamId, uisaPosition, rng);
     if (blocker) {
       blockedBy = blocker;
       continue;
@@ -201,25 +211,28 @@ function trySeongjik(
 ): TryResponseResult & { redirectedTo: PieceId | null } {
   const groupIds = new Set(group.map((c) => c.pieceId));
   const teamId = group[0].teamId;
-  const originalPosition = group[0].originalPosition;
   const candidates = pieces.filter(
     (p) => p.character === "성직" && p.teamId === teamId && !groupIds.has(p.id) && eligiblePosition(p, siblingCaptures) !== null,
   );
   let blockedBy: PieceId | null = null;
   for (const seongjik of candidates) {
-    const blocker = isBlockedByMadam(pieces, teamId, originalPosition, rng);
+    // 성직 후보 자신이 다른 그룹으로 함께 잡혀 이미 대기 상태(start)로 옮겨진 경우, 순간이동
+    // 목적지는 그 성직의 "현재"(start) 위치가 아니라 잡히기 직전 위치여야 한다 — 그렇지
+    // 않으면 판 밖으로 순간이동시키는 무의미한 결과가 나온다. non-null 단정은 candidates
+    // 필터에서 이미 확인했으므로 안전.
+    const seongjikPosition = eligiblePosition(seongjik, siblingCaptures)!;
+    // 마담은 잡힌 말의 위치가 아니라 성직 자신의 위치와 같은 줄에 있어야 저지할 수 있다(위
+    // isBlockedByMadam 문서 참고).
+    const blocker = isBlockedByMadam(pieces, teamId, seongjikPosition, rng);
     if (blocker) {
       blockedBy = blocker;
       continue;
     }
     if (roll(SEONGJIK_CHANCE, rng)) {
-      // 성직 후보 자신이 다른 그룹으로 함께 잡혀 이미 대기 상태(start)로 옮겨진 경우, 순간이동
-      // 목적지는 그 성직의 "현재"(start) 위치가 아니라 잡히기 직전 위치여야 한다 — 그렇지
-      // 않으면 판 밖으로 순간이동시키는 무의미한 결과가 나온다. 그룹 전체가 그 위치로 함께
-      // 순간이동한다(2026-08-30) — 개별 확률이 아니라 그룹 하나에 하나의 판정.
-      const redirectPosition = eligiblePosition(seongjik, siblingCaptures)!;
+      // 그룹 전체가 성직의 위치로 함께 순간이동한다(2026-08-30) — 개별 확률이 아니라 그룹
+      // 하나에 하나의 판정.
       const result = pieces.map((p) =>
-        groupIds.has(p.id) ? { ...p, position: redirectPosition, previousPosition: redirectPosition } : p,
+        groupIds.has(p.id) ? { ...p, position: seongjikPosition, previousPosition: seongjikPosition } : p,
       );
       return { pieces: result, blockedBy: null, redirectedTo: seongjik.id };
     }

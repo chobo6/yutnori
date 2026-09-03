@@ -367,17 +367,37 @@ describe("resolveCaptureResponses", () => {
     expect(victim.position).toEqual({ kind: "outer", index: 15 });
   });
 
-  it("같은 줄에 상대 마담이 있으면 의사/성직 모두 저지되어 정상 잡힘으로 확정된다", () => {
+  it("마담은 잡힌 말이 아니라 의사/성직 자신의 위치를 기준으로 저지 여부를 판정한다(2026-09-04 버그 수정)", () => {
+    // victim은 B줄(6~10)에서 잡혔고, 의사도 B줄(같은 줄)에 있어 마담(B줄)에게 저지된다. 하지만
+    // 성직은 C줄(11~15)에 있어 마담(B줄)과 다른 줄이므로 저지되지 않고 정상적으로 성공해야
+    // 한다 — "잡힌 말의 위치"가 아니라 "성직 자신의 위치"로 마담의 저지 여부를 판정해야
+    // 한다는 사용자 신고(성직이 3번 줄에 있는 상태에서 1번 줄에 있던 다른 말이 잡혔는데, 성직
+    // 능력이 발동했음에도 1번 줄에 있던 마담에게 무효화됐다)를 그대로 재현한 회귀 테스트.
     const pieces = [
       piece("victim", "bob", "B", "마담", 0),
-      piece("uisa", "bob", "B", "의사", 7),
-      piece("seongjik", "bob", "B", "성직", 15),
-      piece("enemy-madam", "alice", "A", "마담", 9), // victim 원래 칸(8)과 같은 줄(B), 상대팀(A)
+      piece("uisa", "bob", "B", "의사", 7), // victim 원래 칸(8)과 같은 줄(B)
+      piece("seongjik", "bob", "B", "성직", 12), // victim과는 다른 줄(C)
+      piece("enemy-madam", "alice", "A", "마담", 9), // victim/의사와는 같은 줄(B), 성직과는 다른 줄(C)
     ];
     pieces[0].position = { kind: "start" };
-    const { pieces: result } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
+    const victim = result.find((p) => p.id === "victim")!;
+    expect(victim.position).toEqual({ kind: "outer", index: 12 }); // 성직 위치로 순간이동 — 저지되지 않음
+    expect(effects[0].blockedBy).toBeNull();
+    expect(effects[0].redirectedTo).toBe("seongjik");
+  });
+
+  it("마담이 성직 자신과 같은 줄에 있으면 성직도 저지된다", () => {
+    const pieces = [
+      piece("victim", "bob", "B", "마담", 0),
+      piece("seongjik", "bob", "B", "성직", 12), // C줄
+      piece("enemy-madam", "alice", "A", "마담", 13), // 성직과 같은 줄(C) — victim과는 다른 줄(B)
+    ];
+    pieces[0].position = { kind: "start" };
+    const { pieces: result, effects } = resolveCaptureResponses(pieces, [capture("victim", "B", 8)], ALWAYS_SUCCEED);
     const victim = result.find((p) => p.id === "victim")!;
     expect(victim.position).toEqual({ kind: "start" }); // 저지되어 그대로 잡힘
+    expect(effects[0].blockedBy).toBe("enemy-madam");
   });
 
   it("같은 팀에 의사가 2개 있으면 하나라도 성공할 때까지 순회한다", () => {
