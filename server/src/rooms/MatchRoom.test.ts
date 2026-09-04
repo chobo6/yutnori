@@ -984,6 +984,41 @@ describe("MatchRoom", () => {
       expect(room.state.phase).toBe("finished");
       expect(room.metadata?.phase).toBe("finished");
     });
+
+    it("팀 동료의 말이 내 이동에 업혀서 함께 완주하면, 동료 자신의 턴이 아니어도 승리 판정이 된다(2026-09-06 버그 수정 — 업기가 팀 기준으로 확장된 뒤 mover 자신만 검사해 동료가 그 순간 자기 말을 전부 완주시킨 경우를 놓쳤다)", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus);
+      const moverSessionId = room.state.turnOrder[room.state.currentTurnIndex];
+      const moverTeam = room.state.players.get(moverSessionId)!.team;
+      const teammateSessionId = [...room.state.players.keys()].find(
+        (sid) => sid !== moverSessionId && room.state.players.get(sid)!.team === moverTeam,
+      )!;
+      const moverPieces = room.state.pieces.filter((p) => p.ownerSessionId === moverSessionId);
+      const teammatePieces = room.state.pieces.filter((p) => p.ownerSessionId === teammateSessionId);
+
+      // 동료의 말 하나는 이미 완주, 나머지 하나는 도착점(20번)에서 mover의 말과 같은 칸에
+      // 둬서 업기(팀 기준, 2026-09-02~)가 성립하게 한다. mover 자신의 다른 말은 완주와 거리가
+      // 먼 상태(start)로 둬서 "mover 자신은 아직 승리 조건을 만족하지 않는다"를 확실히 한다
+      // — 그런데도 승리가 판정된다면 그건 동료 쪽 checkWinner가 잡아낸 것이다.
+      teammatePieces[0].positionKind = "finished";
+      teammatePieces[0].positionIndex = -1;
+      teammatePieces[1].positionKind = "outer";
+      teammatePieces[1].positionIndex = 20;
+      moverPieces[0].positionKind = "outer";
+      moverPieces[0].positionIndex = 20; // 동료 말과 같은 칸 — 팀 기준 업기 성립
+      moverPieces[1].positionKind = "start";
+      moverPieces[1].positionIndex = -1;
+
+      const moverClient = clients.find((c) => c.sessionId === moverSessionId)!;
+      moverClient.send("throwStart", {});
+      await flush(DO_ELAPSED_MS);
+      moverClient.send("throwRelease", {});
+      await flush();
+      moverClient.send("movePiece", { pieceId: moverPieces[0].id, resultId: room.state.pendingResults[0].id });
+      await flush();
+
+      expect(room.state.phase).toBe("finished");
+      expect(room.state.winnerSessionId).toBe(teammateSessionId);
+    });
   });
 
   describe("게임 종료 후 대기실 복귀(2026-08-30~)", () => {

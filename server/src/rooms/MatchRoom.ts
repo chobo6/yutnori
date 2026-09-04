@@ -754,10 +754,19 @@ export class MatchRoom extends Room<MatchState> {
 
     const finalPieces: Piece[] = this.toGamePieces();
 
-    if (checkWinner(finalPieces, sessionId)) {
+    // 승리 판정은 이번 이동을 실행한 사람(sessionId)만이 아니라 전원을 확인해야 한다 —
+    // 업기가 팀 기준으로 확장된 뒤(2026-09-02, pieces.ts 참고)로는 내 이동에 팀 동료의 말이
+    // 업혀서 함께 전진/완주할 수 있어서, 그 동료의 말 전부가 이번에 완주해도 동료 자신의
+    // 턴이 아니면 sessionId만 검사해서는 그 승리를 영원히 놓친다(신고된 버그, 2026-09-06 —
+    // 본인 말 2개+동료 말 1개까지 완주됐는데도 게임이 안 끝남). 동료는 이미 말이 전부
+    // 완주해버려 다음 자기 턴에 옮길 말이 없으므로(autoMove도 이동 대상이 없어 조용히
+    // 아무것도 안 함) 스스로 다시 승리 판정을 유발할 기회조차 없다는 점도 이 버그를 더
+    // 심각하게 만든다.
+    const winnerSessionId = [...this.state.players.keys()].find((pid) => checkWinner(finalPieces, pid));
+    if (winnerSessionId) {
       this.state.phase = "finished";
       this.setMetadata({ phase: "finished" });
-      this.state.winnerSessionId = sessionId;
+      this.state.winnerSessionId = winnerSessionId;
       this.state.turnDeadlineAt = 0;
       this.state.lastThrowResult = "";
       return;
