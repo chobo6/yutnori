@@ -47,8 +47,16 @@ export function createGameServer() {
   // 확인된 사실) — 서버 전용 matchMaker.query() API로 이 엔드포인트를 대신 제공한다.
   app.get("/api/rooms", async (req, res) => {
     const userId = verifySession(req.cookies?.[SESSION_COOKIE_NAME]);
-    if (!userId || !getUserById(userId)?.nickname) {
+    const user = userId ? getUserById(userId) : undefined;
+    if (!user?.nickname) {
       res.status(401).json({ error: "로그인이 필요합니다." });
+      return;
+    }
+    // 밴된 계정은 방 목록 자체를 못 보게 한다 — 클라이언트도 profile.bannedAt으로 이 화면
+    // 자체를 안 그리지만(App.tsx), 직접 API를 호출해 우회하는 경로까지 서버에서 막아야
+    // 한다(서버 권위형 원칙 — MatchRoom.onAuth가 방 입장을 막는 것과 동일한 이유).
+    if (user.bannedAt) {
+      res.status(401).json({ error: "이용이 제한된 계정입니다." });
       return;
     }
     // dev 환경에서는 client(5173)와 server(2567)가 다른 origin이라 CORS 헤더가
@@ -206,7 +214,13 @@ export function createGameServer() {
     res.json(listUsers(offset, limit, q));
   });
 
-  app.post("/api/admin/users/:id/ban", requireAdmin, (req, res) => {
+  // 밴 즉시 강제 퇴장까지 처리한다(songpyeon과 동일 패턴) — DB만 갱신하고 끝내면 이미
+  // 접속 중인 세션은 다음 방 입장 시도 전까지 계속 게임을 할 수 있어 "즉시 퇴장" 요구를
+  // 못 지킨다. getLocalRoomById는 이 프로세스에 떠 있는 실제 룸 인스턴스를 반환한다
+  // (getRoomById와 달리 — 그건 룸 목록 캐시만 반환함, CLAUDE.md 참고). 이 프로젝트는
+  // 단일 프로세스 배포라 "이 프로세스에 있는 것만"이 곧 전부다. 밴을 해제할 때는 강퇴할
+  // 이유가 없으므로 banned가 true일 때만 수행한다.
+  app.post("/api/admin/users/:id/ban", requireAdmin, async (req, res) => {
     const userId = Number(req.params.id);
     if (!Number.isInteger(userId)) {
       res.status(400).json({ error: "잘못된 유저 ID입니다." });
@@ -214,6 +228,13 @@ export function createGameServer() {
     }
     const banned = Boolean((req.body as { banned?: unknown } | undefined)?.banned);
     setUserBanned(userId, banned);
+    if (banned) {
+      const rooms = await matchMaker.query({ name: "match" });
+      for (const r of rooms) {
+        const room = matchMaker.getLocalRoomById(r.roomId) as MatchRoom | undefined;
+        room?.kickUserId(userId);
+      }
+    }
     res.status(204).end();
   });
 

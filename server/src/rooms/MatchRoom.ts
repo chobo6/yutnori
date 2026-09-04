@@ -347,6 +347,26 @@ export class MatchRoom extends Room<MatchState> {
     });
   }
 
+  // 관리자 밴 API에서 호출 — 이 방에 연결된 클라이언트 중 해당 유저의 연결을 전부
+  // 찾아 서버 쪽에서 강제로 끊는다. 같은 계정이 이 방에 동시에 여러 연결(예: 플레이어
+  // 탭 하나 + 관전자 탭 하나)을 갖고 있을 수 있으므로 첫 번째만 끊고 끝내면 안 됨 —
+  // this.clients는 플레이어/관전자 구분 없이 이 방에 연결된 모든 클라이언트를 담고
+  // 있고, client.auth는 onAuth가 반환한 값이 역할과 무관하게 그대로 들어있으므로
+  // filter로 전부 찾아낼 수 있다(songpyeon과 동일 패턴).
+  //
+  // client.leave()로 연결 자체는 즉시 끊기지만, 로스터 정리 시점은 상황에 따라
+  // 다르다: 관전자거나 아직 대기실 단계면 onLeave가 그 자리에서 바로 제거한다. 반면
+  // 상대가 진행 중인 매치의 플레이어면, 이 강제 종료도 여느 비정상 접속 끊김과
+  // 똑같이 onLeave의 재접속 유예(RECONNECTION_GRACE_SECONDS) 경로를 그대로 타므로
+  // 로스터에서 실제로 빠지기까지 유예시간만큼 걸릴 수 있다. 그래도 그 유예시간
+  // 동안은 재접속 시도 자체가(밴 상태를 다시 확인하는 onLeave의 재접속 분기 덕에)
+  // 계속 막혀있으므로 밴이 뚫리진 않는다.
+  kickUserId(userId: number): boolean {
+    const clients = this.clients.filter((c) => c.auth?.userId === userId);
+    for (const client of clients) client.leave();
+    return clients.length > 0;
+  }
+
   /**
    * 핸들러 안에서 발생한 예외가 프로세스를 죽이지 않도록 하는 최후의 방어선.
    * 이 메서드가 정의돼 있어야 Colyseus가 onMessage 핸들러를 try/catch로 감싼다.

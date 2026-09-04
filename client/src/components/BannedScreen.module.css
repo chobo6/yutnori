@@ -1,0 +1,22 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 100svh;
+  padding: 1rem;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.message {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.hint {
+  color: var(--text);
+  opacity: 0.8;
+}

@@ -6,6 +6,7 @@ import { useMatchRoom } from "./game/useMatchRoom";
 import { fetchMe, loginWithGoogle, ping, type Profile } from "./game/auth";
 import { clearReconnectInfo, loadValidReconnectToken, reconnectToRoom, saveReconnectInfo } from "./colyseus";
 import { GoogleLoginScreen } from "./components/GoogleLoginScreen";
+import { BannedScreen } from "./components/BannedScreen";
 import { NicknameSetupScreen } from "./components/NicknameSetupScreen";
 import { InquiryModal } from "./components/InquiryModal";
 import { AnnouncementBanner } from "./components/AnnouncementBanner";
@@ -137,6 +138,13 @@ function App() {
 
   if (profile === null) {
     return <GoogleLoginScreen onCredential={handleCredential} error={loginError} />;
+  }
+
+  // 밴된 계정은 닉네임 설정 여부와 무관하게 로비(방 목록)로 넘어가지 않는다 — 방 입장 자체는
+  // 이미 MatchRoom.onAuth가 막지만, 방 목록을 보는 것조차 막아달라는 요청(2026-09-05)에 따라
+  // 닉네임 체크보다 먼저 확인한다. 서버도 /api/rooms에서 같은 이유로 한 번 더 막는다.
+  if (profile.bannedAt) {
+    return <BannedScreen />;
   }
 
   if (!profile.nickname) {

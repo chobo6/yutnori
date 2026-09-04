@@ -76,6 +76,20 @@ npm run build  # tsc -b && vite build
   `offset`/`limit` 서버 페이지네이션 구조였기 때문에 검색도 같은 서버 쿼리에 조건만 추가하는 쪽으로
   포팅했다(`googleAuth.ts`의 `listUsers`). 새로 songpyeon 기능을 이식할 때 이미 존재하는 yutnori
   쪽 구조(페이지네이션 방식 등)가 다르면 songpyeon 구현을 그대로 베끼지 말고 그 구조에 맞출 것.
+  **밴 즉시 강제 퇴장 + 밴 계정은 방 목록도 조회 불가(2026-09-05~, songpyeon 이식 + 확장)**:
+  `POST /api/admin/users/:id/ban`이 DB 갱신 후(`setUserBanned`) `banned===true`일 때만
+  `matchMaker.query({name:"match"})`로 모든 방을 뒤져 `MatchRoom.kickUserId(userId)`로 그
+  계정의 모든 연결(플레이어든 관전자든, 탭이 여러 개여도 전부)을 강제로 끊는다 — 단일 프로세스
+  배포라 `matchMaker.getLocalRoomById`(진짜 룸 인스턴스 반환, `getRoomById`와 다름)로 가능한
+  songpyeon과 동일 패턴. 대기실/관전자는 즉시 로스터에서 빠지지만, 진행 중인 매치의 플레이어는
+  이 강제 종료도 여느 비정상 접속 끊김과 동일하게 재접속 유예 경로를 타고(로스터 정리만 유예
+  시간만큼 걸림), 그 사이 재접속을 시도해도 기존 재접속-밴 재확인 로직에 다시 걸린다. songpyeon과
+  달리 yutnori는 **밴된 계정이 방 목록조차 못 보게** 추가로 막는다 — `/api/rooms`가 `bannedAt`을
+  확인해 401을 반환하고(`MatchRoom.onAuth`가 방 입장을 막는 것과 동일한 서버 권위형 이유),
+  클라이언트는 `App.tsx`가 `profile.bannedAt`을 닉네임 체크보다 먼저 확인해 `BannedScreen.tsx`를
+  대신 보여준다(방 목록을 아예 렌더링하지 않음). `kickUserId`는 `server/src/rooms/MatchRoom.test.ts`의
+  "강제 퇴장" describe에서 검증되고, `/api/rooms`의 401 응답은 로컬에서 실제 서버를 띄워 수동
+  확인함(HTTP 라우트 테스트 인프라가 이 프로젝트에 아직 없음 — Colyseus 룸 테스트만 있음).
 
 ## 보드 좌표계 — 지름길 모델(2026-08-22 재설계)
 

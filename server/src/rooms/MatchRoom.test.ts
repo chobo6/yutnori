@@ -2,9 +2,11 @@ import { boot, ColyseusTestServer } from "@colyseus/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client as ColyseusJsClient } from "colyseus.js";
 import { createGameServer } from "../createServer";
+import { MatchRoom } from "./MatchRoom";
 import { MatchState } from "./MatchState";
 import { connectAsUser } from "../testUtils/connectAsUser";
 import { db } from "../db/connection";
+import { setUserBanned } from "../auth/googleAuth";
 import { getChatLogs, _resetForTest as resetChatLogsForTest } from "../admin/chatLog";
 
 const CHARACTERS = ["교주", "성직", "마담", "의사"];
@@ -1138,6 +1140,84 @@ describe("MatchRoom", () => {
       await spectator.leave(false);
       await flush();
       expect(room.state.spectators.size).toBe(0);
+    });
+  });
+
+  describe("강제 퇴장(kickUserId, 관리자 밴 API 전용, 2026-09-05~)", () => {
+    function userIdByNickname(nickname: string): number {
+      return (db.prepare(`SELECT id FROM users WHERE nickname = ?`).get(nickname) as { id: number }).id;
+    }
+
+    it("대기실 단계에서 강퇴하면 연결이 즉시 끊기고 로스터에서도 바로 빠진다", async () => {
+      const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방" });
+      const client = await connectAsUser(colyseus, room, "강퇴대상");
+      await flush();
+      expect(room.state.players.has(client.sessionId)).toBe(true);
+
+      const kicked = (room as unknown as MatchRoom).kickUserId(userIdByNickname("강퇴대상"));
+      await flush();
+
+      expect(kicked).toBe(true);
+      expect(room.state.players.has(client.sessionId)).toBe(false);
+    });
+
+    it("연결된 적 없는 유저를 강퇴하려 하면 false를 반환한다", async () => {
+      const room = await colyseus.createRoom<MatchState>("match", { title: "테스트방" });
+      expect((room as unknown as MatchRoom).kickUserId(999999)).toBe(false);
+    });
+
+    it("관전자를 강퇴하면 재접속 유예 없이 즉시 빠진다", async () => {
+      const { room } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 5 });
+      const spectator = await connectAsUser(colyseus, room, "관전강퇴대상");
+      await flush();
+      expect(room.state.spectators.size).toBe(1);
+
+      const kicked = (room as unknown as MatchRoom).kickUserId(userIdByNickname("관전강퇴대상"));
+      await flush();
+
+      expect(kicked).toBe(true);
+      expect(room.state.spectators.size).toBe(0);
+    });
+
+    it("게임 진행 중 강퇴는 연결은 즉시 끊기지만, 로스터 정리는 여느 비정상 접속 끊김과 동일하게 재접속 유예 경로를 탄다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 0.2 });
+      const target = clients[0];
+      const targetSessionId = target.sessionId;
+      const targetNickname = room.state.players.get(targetSessionId)!.nickname;
+
+      const kicked = (room as unknown as MatchRoom).kickUserId(userIdByNickname(targetNickname));
+      await flush();
+      // 매치 진행 중이라, kickUserId가 즉시 부른 client.leave()도 여느 비정상 접속 끊김과
+      // 똑같이 재접속 유예 분기(!consented && phase==="playing")를 타서 로스터가 곧바로
+      // 안 빠진다 — songpyeon과 동일하게 확인된 동작.
+      expect(kicked).toBe(true);
+      expect(room.state.players.has(targetSessionId)).toBe(true);
+
+      await flush(500); // 유예 시간(200ms)보다 확실히 길게 대기
+      expect(room.state.players.has(targetSessionId)).toBe(false);
+    });
+
+    it("밴된 계정으로 재접속을 시도해도 유예 시간 안에 다시 쫓겨난다", async () => {
+      const { room, clients } = await setupFourPlayers(colyseus, { reconnectionGraceSeconds: 5 });
+      const target = clients[0];
+      const targetSessionId = target.sessionId;
+      const targetNickname = room.state.players.get(targetSessionId)!.nickname;
+      const targetUserId = userIdByNickname(targetNickname);
+
+      setUserBanned(targetUserId, true);
+      const kicked = (room as unknown as MatchRoom).kickUserId(targetUserId);
+      await flush();
+      expect(kicked).toBe(true);
+      expect(room.state.players.has(targetSessionId)).toBe(true); // 아직 유예 시간 안
+
+      const port = (colyseus.server as unknown as { port: number }).port;
+      const reconnectClient = new ColyseusJsClient(`ws://127.0.0.1:${port}`);
+      await reconnectClient.reconnect<MatchState>(target.reconnectionToken);
+      await flush();
+
+      // 재접속 자체는 onAuth를 다시 안 타서 성공하지만, onLeave가 재접속 직후 밴 상태를
+      // 다시 확인해 곧바로 다시 내보낸다(MatchRoom.ts의 기존 재접속 밴 재확인 로직).
+      expect(room.state.players.has(targetSessionId)).toBe(false);
     });
   });
 
